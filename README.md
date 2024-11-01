@@ -45,7 +45,7 @@ By default, the `basic_auth_totp` directive is ordered after `basic_auth` in the
 ```caddyfile
 :8080 {
     handle /top-secret/* {
-        basicauth {
+        basic_auth {
             user hashed_password
         }
 
@@ -129,7 +129,7 @@ The following configuration sets up a custom logout endpoint at `/logout` that, 
 
 ```caddyfile
 :8080 {
-    basicauth {
+    basic_auth {
         user hashed_password
     }
 
