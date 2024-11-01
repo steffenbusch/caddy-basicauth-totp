@@ -89,7 +89,7 @@ type BasicAuthTOTP struct {
 
 	// secretsLoadMutex is used to synchronize access to the loadedSecrets map.
 	// This prevents race conditions when loading or accessing user secrets.
-	secretsLoadMutex sync.Mutex
+	secretsLoadMutex *sync.Mutex
 
 	// logger provides structured logging for the module.
 	// It's initialized in the Provision method and used throughout the module for debug information.
@@ -97,7 +97,7 @@ type BasicAuthTOTP struct {
 }
 
 // CaddyModule returns the Caddy module information.
-func (m *BasicAuthTOTP) CaddyModule() caddy.ModuleInfo {
+func (BasicAuthTOTP) CaddyModule() caddy.ModuleInfo {
 	return caddy.ModuleInfo{
 		ID:  "http.handlers.basicauth2fa",
 		New: func() caddy.Module { return new(BasicAuthTOTP) },
@@ -107,6 +107,11 @@ func (m *BasicAuthTOTP) CaddyModule() caddy.ModuleInfo {
 // Provision sets up the module, initializes the logger, and applies default values.
 func (m *BasicAuthTOTP) Provision(ctx caddy.Context) error {
 	m.logger = ctx.Logger()
+
+	// Initialize the mutex if it's nil
+	if m.secretsLoadMutex == nil {
+		m.secretsLoadMutex = &sync.Mutex{}
+	}
 
 	// Set default values if not provided
 	if m.CookieName == "" {
