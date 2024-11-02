@@ -16,6 +16,7 @@ package basicauthtotp
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"sync"
 	"time"
@@ -136,6 +137,14 @@ func (m *BasicAuthTOTP) Provision(ctx caddy.Context) error {
 	return nil
 }
 
+// Validate ensures the configuration is correct.
+func (m *BasicAuthTOTP) Validate() error {
+	if m.SessionInactivityTimeout <= 0 {
+		return fmt.Errorf("SessionInactivityTimeout must be a positive duration")
+	}
+	return nil
+}
+
 // ServeHTTP handles incoming HTTP requests and checks for IP changes.
 func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyhttp.Handler) error {
 	username, _, ok := r.BasicAuth()
@@ -230,5 +239,6 @@ func getClientIP(ctx context.Context) string {
 var (
 	_ caddy.Module                = (*BasicAuthTOTP)(nil)
 	_ caddy.Provisioner           = (*BasicAuthTOTP)(nil)
+	_ caddy.Validator             = (*BasicAuthTOTP)(nil)
 	_ caddyhttp.MiddlewareHandler = (*BasicAuthTOTP)(nil)
 )
