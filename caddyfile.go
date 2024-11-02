@@ -26,7 +26,7 @@ import (
 
 // Initialize the module by registering it with Caddy
 func init() {
-	caddy.RegisterModule(&BasicAuthTOTP{})
+	caddy.RegisterModule(BasicAuthTOTP{})
 	httpcaddyfile.RegisterHandlerDirective("basic_auth_totp", parseCaddyfile)
 	httpcaddyfile.RegisterDirectiveOrder("basic_auth_totp", "after", "basic_auth")
 }
