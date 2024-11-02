@@ -92,7 +92,7 @@ type BasicAuthTOTP struct {
 // CaddyModule returns the Caddy module information.
 func (BasicAuthTOTP) CaddyModule() caddy.ModuleInfo {
 	return caddy.ModuleInfo{
-		ID:  "http.handlers.basicauth2fa",
+		ID:  "http.handlers.basicauthtotp",
 		New: func() caddy.Module { return new(BasicAuthTOTP) },
 	}
 }
