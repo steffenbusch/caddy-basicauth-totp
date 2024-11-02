@@ -50,17 +50,9 @@ import (
 // BasicAuthTOTP is ideal for protecting sensitive or restricted resources by requiring an
 // additional TOTP code, making it a good fit for applications where higher assurance of
 // identity is required.
-//
-// Configuration fields:
-//   - SessionInactivityTimeout: Duration of allowed inactivity before the 2FA session expires.
-//   - SecretsFilePath: Path to the JSON file containing TOTP secrets for each user.
-//   - CookieName: Customizable name for the session cookie (default is basicauthtotp_session).
-//   - CookiePath: Path scope for the session cookie, which should match the protected route.
-//   - LogoutSessionPath: URL path to trigger session logout and clear the 2FA session.
-//   - LogoutRedirectURL: URL to redirect the user to after logging out.
 type BasicAuthTOTP struct {
 	// SessionInactivityTimeout defines the maximum allowed period of inactivity before
-	// a 2FA session expires and requires re-authentication.
+	// a 2FA session expires and requires re-authentication. Default is 60 minutes.
 	SessionInactivityTimeout time.Duration `json:"session_inactivity_timeout,omitempty"`
 
 	// SecretsFilePath specifies the path to the JSON file containing TOTP secrets for each user.
@@ -68,19 +60,20 @@ type BasicAuthTOTP struct {
 	SecretsFilePath string `json:"secrets_file_path,omitempty"`
 
 	// CookieName defines the name of the cookie used to store the session token for 2FA.
-	// If not specified, a default name ("basicauthtotp_session") will be used.
+	// Default is `basicauthtotp_session`.
 	CookieName string `json:"cookie_name,omitempty"`
 
 	// CookiePath specifies the path scope of the session cookie.
-	// This restricts where the cookie is sent on the server. Default is "/".
+	// This restricts where the cookie is sent on the server. Default is `/`.
 	CookiePath string `json:"cookie_path,omitempty"`
 
 	// LogoutSessionPath defines the URL path that triggers a session logout.
 	// When this path is accessed, the 2FA session will be terminated and the cookie will be removed.
+	// Default is `/logout-session`.
 	LogoutSessionPath string `json:"logout_path,omitempty"`
 
 	// LogoutRedirectURL specifies the URL to redirect the user to after they log out of their 2FA session.
-	// This can be a landing page or login page where the user can re-authenticate.
+	// This can be a landing page or login page where the user can re-authenticate. Default is `/`.
 	LogoutRedirectURL string `json:"logout_redirect_url,omitempty"`
 
 	// loadedSecrets holds the map of user secrets, loaded from the SecretsFilePath JSON file.
