@@ -45,52 +45,32 @@ func parseCaddyfile(h httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error)
 func (m *BasicAuthTOTP) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 	for d.Next() {
 		for d.NextBlock(0) {
-			switch d.Val() {
+			param := d.Val()
+			var arg string
+			if !d.Args(&arg) {
+				return d.ArgErr()
+			}
+			switch param {
 			case "session_inactivity_timeout":
-				var inactivityTimeoutStr string
-				if !d.Args(&inactivityTimeoutStr) {
-					return d.ArgErr()
-				}
-				duration, err := time.ParseDuration(inactivityTimeoutStr)
+				duration, err := time.ParseDuration(arg)
 				if err != nil {
 					return fmt.Errorf("invalid session_inactivity_timeout duration: %s", err)
 				}
 				m.SessionInactivityTimeout = duration
 			case "secrets_file_path":
-				var filePath string
-				if !d.Args(&filePath) {
-					return d.ArgErr()
-				}
-				m.SecretsFilePath = filePath
+				m.SecretsFilePath = arg
 			case "cookie_name":
-				var cookieName string
-				if !d.Args(&cookieName) {
-					return d.ArgErr()
-				}
-				m.CookieName = cookieName
+				m.CookieName = arg
 			case "cookie_path":
-				var cookiePath string
-				if !d.Args(&cookiePath) {
-					return d.ArgErr()
-				}
-				m.CookiePath = cookiePath
+				m.CookiePath = arg
 			case "logout_session_path":
-				var logoutPath string
-				if !d.Args(&logoutPath) {
-					return d.ArgErr()
-				}
-				m.LogoutSessionPath = logoutPath
+				m.LogoutSessionPath = arg
 			case "logout_redirect_url":
-				var redirectURL string
-				if !d.Args(&redirectURL) {
-					return d.ArgErr()
-				}
-				m.LogoutRedirectURL = redirectURL
+				m.LogoutRedirectURL = arg
 			default:
-				return d.Errf("unrecognized parameter: %s", d.Val())
+				return d.Errf("unknown subdirective: %s", param)
 			}
 		}
 	}
-
 	return nil
 }
