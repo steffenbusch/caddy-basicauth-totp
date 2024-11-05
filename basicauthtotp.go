@@ -218,7 +218,9 @@ func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next c
 
 	// Create session on successful TOTP validation.
 	m.createSession(w, username, clientIP)
-	return next.ServeHTTP(w, r)
+	// Redirect to the original request URI, preserving any query parameters
+	http.Redirect(w, r, r.URL.RequestURI(), http.StatusFound)
+	return nil
 }
 
 // getClientIP retrieves the client IP address directly from the Caddy context.
