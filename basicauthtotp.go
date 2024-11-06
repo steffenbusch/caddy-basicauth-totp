@@ -152,6 +152,8 @@ func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next c
 		return next.ServeHTTP(w, r)
 	}
 
+	// TODO: The r.URL.Path might not have the expected/configured value of LogoutSessionPath
+	// due to `handle_path`. Maybe we should check for {http.request.orig_uri.path} here?
 	// Handle logout session if the path matches the configured logout path.
 	if r.URL.Path == m.LogoutSessionPath {
 		cookie, err := r.Cookie(m.CookieName)
@@ -218,7 +220,26 @@ func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next c
 
 	// Create session on successful TOTP validation.
 	m.createSession(w, username, clientIP)
-	return next.ServeHTTP(w, r)
+
+	// Access the replacer from the request context to retrieve Caddy's original URI placeholder.
+	repl, ok := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
+	if !ok {
+		return caddyhttp.Error(http.StatusInternalServerError, nil)
+	}
+
+	// Retrieve the unmodified original request URI (e.g., full path before handle_path stripped it).
+	// Fallback to the current request URI if the original is unavailable.
+	redirectURL := repl.ReplaceAll("{http.request.orig_uri}", r.URL.RequestURI())
+
+	// Log the final redirect decision for debugging purposes.
+	m.logger.Debug("Session ok, redirecting",
+		zap.String("redirect_url", redirectURL),
+		zap.String("current_request_uri", r.URL.RequestURI()),
+	)
+
+	// Redirect the client to the original requested URL.
+	http.Redirect(w, r, redirectURL, http.StatusFound)
+	return nil
 }
 
 // getClientIP retrieves the client IP address directly from the Caddy context.
