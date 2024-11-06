@@ -71,7 +71,7 @@ type BasicAuthTOTP struct {
 	// LogoutSessionPath defines the URL path that triggers a session logout.
 	// When this path is accessed, the 2FA session will be terminated and the cookie will be removed.
 	// Default is `/logout-session`.
-	LogoutSessionPath string `json:"logout_path,omitempty"`
+	LogoutSessionPath string `json:"logout_session_path,omitempty"`
 
 	// LogoutRedirectURL specifies the URL to redirect the user to after they log out of their 2FA session.
 	// This can be a landing page or login page where the user can re-authenticate. Default is `/`.
@@ -152,10 +152,17 @@ func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next c
 		return next.ServeHTTP(w, r)
 	}
 
-	// TODO: The r.URL.Path might not have the expected/configured value of LogoutSessionPath
-	// due to `handle_path`. Maybe we should check for {http.request.orig_uri.path} here?
-	// Handle logout session if the path matches the configured logout path.
-	if r.URL.Path == m.LogoutSessionPath {
+	// Access the replacer from the request context to retrieve the requests original URI / path placeholders.
+	repl, ok := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
+	if !ok {
+		return caddyhttp.Error(http.StatusInternalServerError, nil)
+	}
+
+	// Retrieve the unmodified request's original path (e.g., before handle_path stripped it).
+	// Fallback to the current request path if the request's original path is unavailable.
+	request_path := repl.ReplaceAll("{http.request.orig_uri.path}", r.URL.Path)
+
+	if request_path == m.LogoutSessionPath {
 		cookie, err := r.Cookie(m.CookieName)
 		if err == nil {
 			m.deleteSession(w, cookie.Value)
@@ -221,14 +228,8 @@ func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next c
 	// Create session on successful TOTP validation.
 	m.createSession(w, username, clientIP)
 
-	// Access the replacer from the request context to retrieve Caddy's original URI placeholder.
-	repl, ok := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
-	if !ok {
-		return caddyhttp.Error(http.StatusInternalServerError, nil)
-	}
-
-	// Retrieve the unmodified original request URI (e.g., full path before handle_path stripped it).
-	// Fallback to the current request URI if the original is unavailable.
+	// Retrieve the unmodified request's original URI (e.g., full path before handle_path stripped it).
+	// Fallback to the current request URI if the request's original URI is unavailable.
 	redirectURL := repl.ReplaceAll("{http.request.orig_uri}", r.URL.RequestURI())
 
 	// Log the final redirect decision for debugging purposes.
