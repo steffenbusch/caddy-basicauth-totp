@@ -152,6 +152,8 @@ func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next c
 		return next.ServeHTTP(w, r)
 	}
 
+	// TODO: The r.URL.Path might not have the expected/configured value of LogoutSessionPath
+	// due to `handle_path`. Maybe we should check for {http.request.orig_uri.path} here?
 	// Handle logout session if the path matches the configured logout path.
 	if r.URL.Path == m.LogoutSessionPath {
 		cookie, err := r.Cookie(m.CookieName)
