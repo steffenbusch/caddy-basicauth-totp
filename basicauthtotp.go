@@ -253,9 +253,6 @@ func getClientIP(ctx context.Context) string {
 	return ""
 }
 
-// show2FAForm displays a styled 2FA form with an optional error message.
-// This function is defined in a separate file to modularize HTML rendering.
-
 // Interface guards to ensure BasicAuthTOTP implements the necessary interfaces.
 var (
 	_ caddy.Module                = (*BasicAuthTOTP)(nil)
