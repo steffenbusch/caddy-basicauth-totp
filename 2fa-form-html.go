@@ -15,12 +15,37 @@
 package basicauthtotp
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"net/http"
+
+	"go.uber.org/zap"
 )
 
+// generateNonce generates a random base64 nonce
+func generateNonce() (string, error) {
+	nonceBytes := make([]byte, 18) // 18 bytes (144 bits) avoids `==` padding in base64
+	_, err := rand.Read(nonceBytes)
+	if err != nil {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(nonceBytes), nil
+}
+
 // show2FAForm displays a styled 2FA form with a custom error message if provided.
-func show2FAForm(w http.ResponseWriter, errorMessage string) {
+func (m *BasicAuthTOTP) show2FAForm(w http.ResponseWriter, errorMessage string) {
+	// Generate a nonce for this request
+	nonce, err := generateNonce()
+	if err != nil {
+		m.logger.Error("failed to generate nonce for 2FA form: ",
+			zap.Error(err))
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	// Set the Content-Type and Content-Security-Policy headers with nonce
 	w.Header().Set("Content-Type", "text/html")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'self' 'nonce-"+nonce+"'; form-action 'self';")
 	w.WriteHeader(http.StatusOK)
 
 	// Set the error message HTML if an error message is provided
@@ -36,7 +61,7 @@ func show2FAForm(w http.ResponseWriter, errorMessage string) {
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>2FA Authentication</title>
-            <style>
+            <style nonce="` + nonce + `">
 				body {
 					font-family: Arial, sans-serif;
 					display: flex;
