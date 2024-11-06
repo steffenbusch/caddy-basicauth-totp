@@ -24,7 +24,7 @@ import (
 
 // generateNonce generates a random base64 nonce
 func generateNonce() (string, error) {
-	nonceBytes := make([]byte, 16) // 16 bytes = 128 bits
+	nonceBytes := make([]byte, 18) // 18 bytes (144 bits) avoids `==` padding in base64
 	_, err := rand.Read(nonceBytes)
 	if err != nil {
 		return "", err
