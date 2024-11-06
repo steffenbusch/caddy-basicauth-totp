@@ -23,6 +23,9 @@ When accessing a protected route, users will first be prompted to enter their Ba
   <img src="assets/totp-input-screen.png" alt="TOTP 2FA Input Screen">
 </p>
 
+> [!NOTE]
+> **Content Security Policy (CSP)**: The 2FA form applies a dedicated CSP header with a unique nonce for inline styles and sets `form-action` to `'self'`, which overwrites any other CSP configuration that might otherwise restrict inline styles or form submissions. This ensures the form functions correctly and securely.
+
 ## Disclaimer
 
 **Experimental Module**: This plugin is currently in an experimental phase and is primarily developed to meet specific, personal requirements. While contributions and suggestions are welcome, please be aware that this module may lack certain features or robustness expected in production environments.
