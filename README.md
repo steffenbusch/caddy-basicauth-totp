@@ -57,7 +57,7 @@ By default, the `basic_auth_totp` directive is ordered after `basic_auth` in the
             secrets_file_path /path/to/2fa-secrets.json
             cookie_name basicauthtotp_session
             cookie_path /top-secret
-            logout_path /top-secret/logout
+            logout_session_path /top-secret/logout
             logout_redirect_url /
         }
 
@@ -97,8 +97,8 @@ By default, the `basic_auth_totp` directive is ordered after `basic_auth` in the
 - **`cookie_path`**: Sets the path scope of the session cookie, defining where it will be sent on the server. Default is `/`.
   - *Usage Tip*: Ensure this aligns with the URL path protected by `basic_auth`, as the cookie will only be sent to matching paths.
 
-- **`logout_path`**: Defines the URL path for logging out and clearing the 2FA session. Default is `/logout-session`.
-  - *Usage Tip*: If your protected path is within a specific route (e.g., `/top-secret/*`), ensure that the `logout_path` is nested under the same route (e.g., `/top-secret/logout`). This allows the `handle` directive to correctly route the logout requests to `basic_auth_totp`.
+- **`logout_session_path`**: Defines the URL path for logging out and clearing the 2FA session. Default is `/logout-session`.
+  - *Usage Tip*: If your protected path is within a specific route (e.g., `/top-secret/*`), ensure that the `logout_session_path` is nested under the same route (e.g., `/top-secret/logout`). This allows the `handle` directive to correctly route the logout requests to `basic_auth_totp`.
 
 - **`logout_redirect_url`**: Specifies the URL to redirect users to after logging out. Default is `/`.
 
@@ -139,7 +139,7 @@ The following configuration sets up a custom logout endpoint at `/logout` that, 
     basic_auth_totp {
         session_inactivity_timeout 30m
         secrets_file_path /path/to/2fa-secrets.json
-        logout_path /logout
+        logout_session_path /logout
         logout_redirect_url /
     }
 }

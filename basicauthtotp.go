@@ -71,7 +71,7 @@ type BasicAuthTOTP struct {
 	// LogoutSessionPath defines the URL path that triggers a session logout.
 	// When this path is accessed, the 2FA session will be terminated and the cookie will be removed.
 	// Default is `/logout-session`.
-	LogoutSessionPath string `json:"logout_path,omitempty"`
+	LogoutSessionPath string `json:"logout_session_path,omitempty"`
 
 	// LogoutRedirectURL specifies the URL to redirect the user to after they log out of their 2FA session.
 	// This can be a landing page or login page where the user can re-authenticate. Default is `/`.
