@@ -152,10 +152,17 @@ func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next c
 		return next.ServeHTTP(w, r)
 	}
 
-	// TODO: The r.URL.Path might not have the expected/configured value of LogoutSessionPath
-	// due to `handle_path`. Maybe we should check for {http.request.orig_uri.path} here?
-	// Handle logout session if the path matches the configured logout path.
-	if r.URL.Path == m.LogoutSessionPath {
+	// Access the replacer from the request context to retrieve the requests original URI / path placeholders.
+	repl, ok := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
+	if !ok {
+		return caddyhttp.Error(http.StatusInternalServerError, nil)
+	}
+
+	// Retrieve the unmodified request's original path (e.g., before handle_path stripped it).
+	// Fallback to the current request path if the request's original path is unavailable.
+	request_path := repl.ReplaceAll("{http.request.orig_uri.path}", r.URL.Path)
+
+	if request_path == m.LogoutSessionPath {
 		cookie, err := r.Cookie(m.CookieName)
 		if err == nil {
 			m.deleteSession(w, cookie.Value)
@@ -221,14 +228,8 @@ func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next c
 	// Create session on successful TOTP validation.
 	m.createSession(w, username, clientIP)
 
-	// Access the replacer from the request context to retrieve Caddy's original URI placeholder.
-	repl, ok := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
-	if !ok {
-		return caddyhttp.Error(http.StatusInternalServerError, nil)
-	}
-
-	// Retrieve the unmodified original request URI (e.g., full path before handle_path stripped it).
-	// Fallback to the current request URI if the original is unavailable.
+	// Retrieve the unmodified request's original URI (e.g., full path before handle_path stripped it).
+	// Fallback to the current request URI if the request's original URI is unavailable.
 	redirectURL := repl.ReplaceAll("{http.request.orig_uri}", r.URL.RequestURI())
 
 	// Log the final redirect decision for debugging purposes.
