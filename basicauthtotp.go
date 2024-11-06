@@ -172,7 +172,7 @@ func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next c
 	}
 
 	if r.Method != http.MethodPost {
-		show2FAForm(w, "")
+		m.show2FAForm(w, "")
 		return nil
 	}
 
@@ -189,7 +189,7 @@ func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next c
 			zap.String("username", username),
 			zap.String("client_ip", clientIP),
 		)
-		show2FAForm(w, "")
+		m.show2FAForm(w, "")
 		return nil
 	}
 
@@ -203,7 +203,7 @@ func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next c
 			zap.String("client_ip", clientIP),
 			zap.Error(err),
 		)
-		show2FAForm(w, "Authentication error. Please contact support.")
+		m.show2FAForm(w, "Authentication error. Please contact support.")
 		return nil
 	}
 
@@ -214,7 +214,7 @@ func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next c
 			zap.String("username", username),
 			zap.String("client_ip", clientIP),
 		)
-		show2FAForm(w, "Invalid TOTP code. Please try again.")
+		m.show2FAForm(w, "Invalid TOTP code. Please try again.")
 		return nil
 	}
 
