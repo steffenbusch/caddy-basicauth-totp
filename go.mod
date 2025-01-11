@@ -1,6 +1,7 @@
 module github.com/steffenbusch/caddy-basicauth-totp
 
-go 1.22
+go 1.22.3
+
 toolchain go1.22.7
 
 require (
