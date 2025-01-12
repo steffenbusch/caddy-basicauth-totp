@@ -6,7 +6,7 @@ toolchain go1.22.7
 
 require (
 	github.com/caddyserver/caddy/v2 v2.9.1
-	github.com/google/uuid v1.6.0
+	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/pquerna/otp v1.4.0
 	go.uber.org/zap v1.27.0
 )
@@ -46,6 +46,7 @@ require (
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/cel-go v0.21.0 // indirect
 	github.com/google/pprof v0.0.0-20231212022811-ec68065c825e // indirect
+	github.com/google/uuid v1.6.0 // indirect
 	github.com/huandu/xstrings v1.5.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jackc/chunkreader/v2 v2.0.1 // indirect
