@@ -67,6 +67,8 @@ func (m *BasicAuthTOTP) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				m.LogoutSessionPath = arg
 			case "logout_redirect_url":
 				m.LogoutRedirectURL = arg
+			case "sign_key":
+				m.SignKey = arg
 			default:
 				return d.Errf("unknown subdirective: %s", param)
 			}
