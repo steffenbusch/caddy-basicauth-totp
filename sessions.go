@@ -15,43 +15,40 @@
 package basicauthtotp
 
 import (
+	"fmt"
 	"net/http"
-	"sync"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/golang-jwt/jwt/v5"
 	"go.uber.org/zap"
 )
 
-// session represents a 2FA session with expiration and client IP tracking.
-type session struct {
-	username string
-	expires  time.Time
-	clientIP string
-}
-
-var sessionStore = make(map[string]session)
-var mu sync.RWMutex
-
-// createSession generates a new session with a specified client IP and logs the details.
-func (m *BasicAuthTOTP) createSession(w http.ResponseWriter, username, clientIP string) {
-	token := uuid.NewString()
-	mu.Lock()
-	defer mu.Unlock()
-
+// createOrUpdateJWTCookie generates a new JWT with a specified client IP or updates an existing one, and logs the details.
+func (m *BasicAuthTOTP) createOrUpdateJWTCookie(w http.ResponseWriter, username, clientIP string) {
 	expiration := time.Now().Add(m.SessionInactivityTimeout)
-	sessionStore[token] = session{username: username, expires: expiration, clientIP: clientIP}
+	claims := jwt.MapClaims{
+		"username": username,
+		"clientIP": clientIP,
+		"exp":      expiration.Unix(),
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signedToken, err := token.SignedString([]byte(m.SignKey))
+	if err != nil {
+		m.logger.Error("Failed to sign JWT", zap.Error(err))
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
 
-	m.logger.Debug("Created new session",
+	m.logger.Debug("Created or updated session",
 		zap.String("username", username),
 		zap.String("client_ip", clientIP),
-		zap.String("token", token),
+		zap.String("token", signedToken),
 		zap.Time("expires", expiration),
 	)
 
 	cookie := &http.Cookie{
 		Name:     m.CookieName,
-		Value:    token,
+		Value:    signedToken,
 		Path:     m.CookiePath,
 		HttpOnly: true,
 		Secure:   true,
@@ -61,54 +58,54 @@ func (m *BasicAuthTOTP) createSession(w http.ResponseWriter, username, clientIP 
 	http.SetCookie(w, cookie)
 }
 
-// deleteSession removes the session from the store and clears the cookie.
-func (m *BasicAuthTOTP) deleteSession(w http.ResponseWriter, token string) {
-	mu.Lock()
-	delete(sessionStore, token)
-	mu.Unlock()
-
-	http.SetCookie(w, &http.Cookie{
-		Name:     m.CookieName,
-		Value:    "",
-		Path:     m.CookiePath,
-		Expires:  time.Unix(0, 0),
-		HttpOnly: true,
-		Secure:   true,
-		SameSite: http.SameSiteLaxMode,
-	})
-}
-
-// hasValidSession checks if there is a valid session with a matching client IP.
-// It extends the session expiration if less than 50% of the inactivity timeout remains.
-func (m *BasicAuthTOTP) hasValidSession(r *http.Request, username, clientIP string) bool {
+// hasValidJWTCookie checks if there is a valid JWT with a matching client IP.
+func (m *BasicAuthTOTP) hasValidJWTCookie(w http.ResponseWriter, r *http.Request, username, clientIP string) bool {
 	cookie, err := r.Cookie(m.CookieName)
 	if err != nil {
 		return false
 	}
 
-	mu.RLock()
-	sess, exists := sessionStore[cookie.Value]
-	mu.RUnlock()
-
-	if !exists || sess.username != username || time.Now().After(sess.expires) || sess.clientIP != clientIP {
+	token, err := jwt.Parse(cookie.Value, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return []byte(m.SignKey), nil
+	})
+	if err != nil {
+		m.logger.Error("Failed to parse JWT", zap.Error(err))
 		return false
 	}
 
-	// Extend session if less than 50% of inactivity timeout remains
-	threshold := m.SessionInactivityTimeout / 2
-	if time.Until(sess.expires) < threshold {
-		mu.Lock()
-		sess.expires = time.Now().Add(m.SessionInactivityTimeout)
-		sessionStore[cookie.Value] = sess
-		mu.Unlock()
+	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+		if claims["username"] != username || claims["clientIP"] != clientIP {
+			m.logger.Warn("JWT does not match username or client IP",
+				zap.String("username", username),
+				zap.String("client_ip", clientIP),
+				zap.String("token_username", claims["username"].(string)),
+				zap.String("token_client_ip", claims["clientIP"].(string)),
+			)
+			return false
+		}
 
-		m.logger.Debug("Extended session due to activity",
-			zap.String("username", username),
-			zap.String("client_ip", clientIP),
-			zap.String("token", cookie.Value),
-			zap.Time("new_expires", sess.expires),
-		)
+		expiration := time.Unix(int64(claims["exp"].(float64)), 0)
+		if time.Now().After(expiration) {
+			m.logger.Debug("JWT has expired", zap.Time("expiration", expiration))
+			return false
+		}
+
+		// Extend session if less than 50% of inactivity timeout remains
+		threshold := m.SessionInactivityTimeout / 2
+		if time.Until(expiration) < threshold {
+			m.logger.Debug("Extending session",
+				zap.String("username", username),
+				zap.String("client_ip", clientIP),
+				zap.Time("expiration", expiration),
+			)
+			m.createOrUpdateJWTCookie(w, username, clientIP)
+		}
+
+		return true
 	}
 
-	return true
+	return false
 }

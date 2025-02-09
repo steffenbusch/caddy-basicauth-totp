@@ -63,10 +63,11 @@ func (m *BasicAuthTOTP) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				m.CookieName = arg
 			case "cookie_path":
 				m.CookiePath = arg
+			case "sign_key":
+				m.SignKey = arg
 			case "logout_session_path":
-				m.LogoutSessionPath = arg
 			case "logout_redirect_url":
-				m.LogoutRedirectURL = arg
+				return d.Errf("logout support was dropped. Remove subdirective %s", param)
 			default:
 				return d.Errf("unknown subdirective: %s", param)
 			}

@@ -39,13 +39,21 @@ import (
 // intended for production environments without additional testing, as it is in an experimental phase.
 //
 // Key features include:
-//   - Session-based TOTP authentication with configurable inactivity timeouts.
+//   - JWT(JSON Web Token)-session-based TOTP authentication with configurable inactivity timeouts.
 //   - IP binding for session validation, requiring re-authentication if the user's IP changes.
 //   - Customizable session cookie options, including name and path scope.
 //
-// Configuration options in BasicAuthTOTP provide flexibility in securing routes, managing
-// session behavior, and allowing users to log out via a dedicated logout path. Secrets are
-// loaded from a specified JSON file that maps usernames to TOTP secrets.
+// Instead of server-side session management, this module uses JWTs stored in cookies to manage
+// sessions. This approach simplifies session handling and no sessions are lost when
+// Caddy is reloaded or restarted.
+// However, this approach is less secure than server-side session management, as JWTs are
+// not invalidated or blacklisted and no logout is provided. To mitigate risks, the module uses IP binding
+// to ensure that the JWT is only valid for the client IP address that created it.
+// If the client IP changes, the JWT cookie is removed and the user must re-authenticate.
+//
+// Configuration options in BasicAuthTOTP provide flexibility in securing routes, and
+// managing session inactivity timeout. Secrets are loaded from a specified JSON file that maps
+// usernames to TOTP secrets.
 //
 // Example use case:
 // BasicAuthTOTP is ideal for protecting sensitive or restricted resources by requiring an
@@ -61,21 +69,15 @@ type BasicAuthTOTP struct {
 	SecretsFilePath string `json:"secrets_file_path,omitempty"`
 
 	// CookieName defines the name of the cookie used to store the session token for 2FA.
-	// Default is `basicauthtotp_session`.
+	// Default is `batotp_sess`.
 	CookieName string `json:"cookie_name,omitempty"`
 
 	// CookiePath specifies the path scope of the session cookie.
 	// This restricts where the cookie is sent on the server. Default is `/`.
 	CookiePath string `json:"cookie_path,omitempty"`
 
-	// LogoutSessionPath defines the URL path that triggers a session logout.
-	// When this path is accessed, the 2FA session will be terminated and the cookie will be removed.
-	// Default is `/logout-session`.
-	LogoutSessionPath string `json:"logout_session_path,omitempty"`
-
-	// LogoutRedirectURL specifies the URL to redirect the user to after they log out of their 2FA session.
-	// This can be a landing page or login page where the user can re-authenticate. Default is `/`.
-	LogoutRedirectURL string `json:"logout_redirect_url,omitempty"`
+	// SignKey is the key used to sign the JWT tokens.
+	SignKey string `json:"sign_key,omitempty"`
 
 	// loadedSecrets holds the map of user secrets, loaded from the SecretsFilePath JSON file.
 	// This map is populated when the file is read and accessed when validating TOTP codes.
@@ -109,19 +111,13 @@ func (m *BasicAuthTOTP) Provision(ctx caddy.Context) error {
 
 	// Set default values if not provided
 	if m.CookieName == "" {
-		m.CookieName = "basicauthtotp_session"
+		m.CookieName = "batotp_sess"
 	}
 	if m.CookiePath == "" {
 		m.CookiePath = "/"
 	}
 	if m.SessionInactivityTimeout == 0 {
 		m.SessionInactivityTimeout = 60 * time.Minute // Default inactivity timeout
-	}
-	if m.LogoutSessionPath == "" {
-		m.LogoutSessionPath = "/logout-session"
-	}
-	if m.LogoutRedirectURL == "" {
-		m.LogoutRedirectURL = "/"
 	}
 
 	// Log the chosen configuration values
@@ -130,10 +126,8 @@ func (m *BasicAuthTOTP) Provision(ctx caddy.Context) error {
 		zap.String("SecretsFilePath", m.SecretsFilePath),
 		zap.String("CookieName", m.CookieName),
 		zap.String("CookiePath", m.CookiePath),
-		zap.String("LogoutSessionPath", m.LogoutSessionPath),
-		zap.String("LogoutRedirectURL", m.LogoutRedirectURL),
+		// SignKey is omitted from the log output for security reasons.
 	)
-
 	return nil
 }
 
@@ -141,6 +135,15 @@ func (m *BasicAuthTOTP) Provision(ctx caddy.Context) error {
 func (m *BasicAuthTOTP) Validate() error {
 	if m.SessionInactivityTimeout <= 0 {
 		return fmt.Errorf("SessionInactivityTimeout must be a positive duration")
+	}
+	if m.SignKey == "" {
+		return fmt.Errorf("SignKey must be defined")
+	}
+	if len(m.SignKey) < 32 {
+		return fmt.Errorf("SignKey must be at least 32 characters long")
+	}
+	if !isValidSignKeyFormat(m.SignKey) {
+		return fmt.Errorf("SignKey must contain only alphanumeric characters and special characters")
 	}
 	return nil
 }
@@ -158,23 +161,9 @@ func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next c
 		return caddyhttp.Error(http.StatusInternalServerError, nil)
 	}
 
-	// Retrieve the unmodified request's original path (e.g., before handle_path stripped it).
-	// Fallback to the current request path if the request's original path is unavailable.
-	request_path := repl.ReplaceAll("{http.request.orig_uri.path}", r.URL.Path)
-
-	if request_path == m.LogoutSessionPath {
-		cookie, err := r.Cookie(m.CookieName)
-		if err == nil {
-			m.deleteSession(w, cookie.Value)
-		}
-		// Redirect to the configured logout URL, or fallback to "/"
-		http.Redirect(w, r, m.LogoutRedirectURL, http.StatusSeeOther)
-		return nil
-	}
-
 	// Validate session and check IP consistency
 	clientIP := getClientIP(r.Context())
-	if m.hasValidSession(r, username, clientIP) {
+	if m.hasValidJWTCookie(w, r, username, clientIP) {
 		return next.ServeHTTP(w, r)
 	}
 
@@ -225,8 +214,8 @@ func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next c
 		return nil
 	}
 
-	// Create session on successful TOTP validation.
-	m.createSession(w, username, clientIP)
+	// Create a new JWT session cookie for the user on successful TOTP validation.
+	m.createOrUpdateJWTCookie(w, username, clientIP)
 
 	// Retrieve the unmodified request's original URI (e.g., full path before handle_path stripped it).
 	// Fallback to the current request URI if the request's original URI is unavailable.
@@ -252,6 +241,19 @@ func getClientIP(ctx context.Context) string {
 		}
 	}
 	return ""
+}
+
+// isValidSignKeyFormat checks if the SignKey contains only valid characters.
+func isValidSignKeyFormat(key string) bool {
+	for _, char := range key {
+		if !((char >= 'a' && char <= 'z') ||
+			(char >= 'A' && char <= 'Z') ||
+			(char >= '0' && char <= '9') ||
+			(char == '-' || char == '_' || char == '+' || char == '/' || char == '=')) {
+			return false
+		}
+	}
+	return true
 }
 
 // Interface guards to ensure BasicAuthTOTP implements the necessary interfaces.
