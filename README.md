@@ -19,7 +19,7 @@ This plugin introduces additional authentication steps within Caddy configuratio
 - **TOTP Authentication**: Requires users to enter a valid TOTP code in addition to basic auth credentials.
 - **JWT-based session management** with configurable inactivity-based expiration and IP-based session validation to prevent session hijacking.
 
-Instead of server-side session management, this module uses JWTs stored in cookies to manage sessions. This approach simplifies session handling and no sessions are lost when Caddy is reloaded or restarted. However, this approach is less secure than server-side session management, as JWTs are not invalidated or blacklisted. To mitigate risks, the module uses IP binding to ensure that the JWT is only valid for the client IP address that created it. If the client IP changes, the JWT cookie is removed and the user must re-authenticate.
+Instead of server-side session management, this module uses JWTs stored in cookies to manage sessions. This approach simplifies session handling and no sessions are lost when Caddy is reloaded or restarted. However, this approach is less secure than server-side session management, as JWTs are not invalidated or blacklisted. To mitigate risks, the module uses IP binding to ensure that the JWT is only valid for the client IP address that created it. If the client IP changes, the user must re-authenticate.
 
 ### Authentication Flow
 
@@ -61,7 +61,7 @@ By default, the `basic_auth_totp` directive is ordered after `basic_auth` in the
         basic_auth_totp {
             session_inactivity_timeout 2h
             secrets_file_path /path/to/2fa-secrets.json
-            cookie_name basicauthtotp_session
+            cookie_name batotp_sess
             cookie_path /top-secret
         }
 
@@ -96,7 +96,7 @@ By default, the `basic_auth_totp` directive is ordered after `basic_auth` in the
 
   Each user should have a unique TOTP secret, formatted in **Base32** without padding (`=`). This key will later be used by a TOTP-compatible app (such as Google Authenticator or Authy) to generate time-based one-time passwords.
 
-- **`cookie_name`**: Defines a custom name for the session cookie that stores the 2FA token. Default is `basicauthtotp_session`.
+- **`cookie_name`**: Defines a custom name for the session cookie that stores the 2FA token. Default is `batotp_sess`.
 
 - **`cookie_path`**: Sets the path scope of the session cookie, defining where it will be sent on the server. Default is `/`.
   - *Usage Tip*: Ensure this aligns with the URL path protected by `basic_auth`, as the cookie will only be sent to matching paths.

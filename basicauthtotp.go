@@ -69,7 +69,7 @@ type BasicAuthTOTP struct {
 	SecretsFilePath string `json:"secrets_file_path,omitempty"`
 
 	// CookieName defines the name of the cookie used to store the session token for 2FA.
-	// Default is `basicauthtotp_session`.
+	// Default is `batotp_sess`.
 	CookieName string `json:"cookie_name,omitempty"`
 
 	// CookiePath specifies the path scope of the session cookie.
@@ -111,7 +111,7 @@ func (m *BasicAuthTOTP) Provision(ctx caddy.Context) error {
 
 	// Set default values if not provided
 	if m.CookieName == "" {
-		m.CookieName = "basicauthtotp_session"
+		m.CookieName = "batotp_sess"
 	}
 	if m.CookiePath == "" {
 		m.CookiePath = "/"
