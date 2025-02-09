@@ -1,6 +1,7 @@
 # BasicAuthTOTP Caddy Plugin
 
-The **BasicAuthTOTP** plugin for [Caddy](https://caddyserver.com) enhances Caddy's basic authentication with Time-based One-Time Password (TOTP) two-factor authentication (2FA). This plugin is designed for use with Caddy's basic authentication, adding an extra layer of security for web applications and services hosted with Caddy.
+The **BasicAuthTOTP** plugin for [Caddy](https://caddyserver.com) enhances Caddy's basic authentication with Time-based One-Time Password (TOTP) two-factor authentication (2FA).
+This module supplements `basic_auth` and does not replace it; therefore, `basic_auth` must be configured and active for this plugin to function correctly. It's adding an extra layer of security for web applications and services hosted with Caddy.
 
 > [!TIP]
 > For more extensive authentication, authorization, and accounting requirements, consider using [AuthCrunch / caddy-security](https://github.com/greenpau/caddy-security). AuthCrunch provides a comprehensive AAA solution, supporting Form-Based, Basic, Local, LDAP, OpenID Connect, OAuth 2.0 (e.g., GitHub, Google, Facebook), SAML Authentication, and 2FA/MFA (including app-based authenticators and Yubico). It also offers authorization with JWT/PASETO tokens, making it ideal for more complex or larger-scale environments.
@@ -12,8 +13,9 @@ The **BasicAuthTOTP** plugin for [Caddy](https://caddyserver.com) enhances Caddy
 This plugin introduces additional authentication steps within Caddy configurations:
 
 - **TOTP Authentication**: Requires users to enter a valid TOTP code in addition to basic auth credentials.
-- **Session Management**: Allows configurable inactivity-based session expiration and IP-based session validation to prevent session hijacking.
-- **Logout Support**: Provides a custom logout endpoint that clears the 2FA session, enabling users to securely log out of the 2FA session. **Note:** This does not log the user out of Basic Authentication, as Basic Auth sessions are managed separately by the browser and are not affected by the 2FA logout.
+- **JWT-based session management** with configurable inactivity-based expiration and IP-based session validation to prevent session hijacking.
+
+Instead of server-side session management, this module uses JWTs stored in cookies to manage sessions. This approach simplifies session handling and no sessions are lost when Caddy is reloaded or restarted. However, this approach is less secure than server-side session management, as JWTs are not invalidated or blacklisted. To mitigate risks, the module uses IP binding to ensure that the JWT is only valid for the client IP address that created it. If the client IP changes, the JWT cookie is removed and the user must re-authenticate.
 
 ### Authentication Flow
 
@@ -57,8 +59,6 @@ By default, the `basic_auth_totp` directive is ordered after `basic_auth` in the
             secrets_file_path /path/to/2fa-secrets.json
             cookie_name basicauthtotp_session
             cookie_path /top-secret
-            logout_session_path /top-secret/logout
-            logout_redirect_url /
         }
 
         respond "Welcome, you have passed basic and TOTP authentication!"
@@ -97,10 +97,7 @@ By default, the `basic_auth_totp` directive is ordered after `basic_auth` in the
 - **`cookie_path`**: Sets the path scope of the session cookie, defining where it will be sent on the server. Default is `/`.
   - *Usage Tip*: Ensure this aligns with the URL path protected by `basic_auth`, as the cookie will only be sent to matching paths.
 
-- **`logout_session_path`**: Defines the URL path for logging out and clearing the 2FA session. Default is `/logout-session`.
-  - *Usage Tip*: If your protected path is within a specific route (e.g., `/top-secret/*`), ensure that the `logout_session_path` is nested under the same route (e.g., `/top-secret/logout`). This allows the `handle` directive to correctly route the logout requests to `basic_auth_totp`. If you use `handle_path` or `uri` with `strip_prefix` that might modify the path before reaching `basic_auth_totp`, configure `logout_session_path` with the unmodified path (i.e., the original URI). This ensures `basic_auth_totp` receives the correct path to trigger the logout session.
-
-- **`logout_redirect_url`**: Specifies the URL to redirect users to after logging out. Default is `/`.
+- **`sign_key`**: The key used to sign the JWT tokens. Must be at least 32 characters long.
 
 ### Session Management Explanation
 
@@ -126,25 +123,6 @@ This Base32 key can then be stored in `secrets_file_path` and will be used by th
 
 If you want to set up the secret directly in a 2FA app, you can also generate a QR code that includes the Base32 secret. A useful tool for this is the [2FA QR Code Generator](https://stefansundin.github.io/2fa-qr/), where you can input the Base32 key to create a scannable QR code for the app.
 
-### Example: Custom Logout Path
-
-The following configuration sets up a custom logout endpoint at `/logout` that, when accessed, will clear the user's 2FA session and redirect them to the root URL (`/`):
-
-```caddyfile
-:8080 {
-    basic_auth {
-        user hashed_password
-    }
-
-    basic_auth_totp {
-        session_inactivity_timeout 30m
-        secrets_file_path /path/to/2fa-secrets.json
-        logout_session_path /logout
-        logout_redirect_url /
-    }
-}
-```
-
 ## Security Considerations
 
 - **TOTP Secret Management**: Ensure that the `secrets_file_path` is secure and not accessible via the web server. This file contains sensitive user secrets and should be protected from unauthorized access.
@@ -167,7 +145,7 @@ The following configuration sets up a custom logout endpoint at `/logout` that, 
 
 ## License
 
-This project is licensed under the Apache License 2.0. See the [LICENSE](LICENSE) file for details.
+This project is licensed under the Apache License, Version 2.0. See the [LICENSE](LICENSE) file for details.
 
 ## Acknowledgements
 

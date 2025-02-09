@@ -58,19 +58,6 @@ func (m *BasicAuthTOTP) createOrUpdateJWTCookie(w http.ResponseWriter, username,
 	http.SetCookie(w, cookie)
 }
 
-// deleteJWTCookie clears the JWT cookie.
-func (m *BasicAuthTOTP) deleteJWTCookie(w http.ResponseWriter) {
-	http.SetCookie(w, &http.Cookie{
-		Name:     m.CookieName,
-		Value:    "",
-		Path:     m.CookiePath,
-		Expires:  time.Unix(0, 0),
-		HttpOnly: true,
-		Secure:   true,
-		SameSite: http.SameSiteLaxMode,
-	})
-}
-
 // hasValidJWTCookie checks if there is a valid JWT with a matching client IP.
 func (m *BasicAuthTOTP) hasValidJWTCookie(w http.ResponseWriter, r *http.Request, username, clientIP string) bool {
 	cookie, err := r.Cookie(m.CookieName)

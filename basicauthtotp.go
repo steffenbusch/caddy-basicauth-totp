@@ -47,13 +47,13 @@ import (
 // sessions. This approach simplifies session handling and no sessions are lost when
 // Caddy is reloaded or restarted.
 // However, this approach is less secure than server-side session management, as JWTs are
-// not invalidated or blacklisted on logout. To mitigate risks, the module uses IP binding
+// not invalidated or blacklisted and no logout is provided. To mitigate risks, the module uses IP binding
 // to ensure that the JWT is only valid for the client IP address that created it.
 // If the client IP changes, the JWT cookie is removed and the user must re-authenticate.
 //
-// Configuration options in BasicAuthTOTP provide flexibility in securing routes, managing
-// session behavior, and allowing users to log out via a dedicated logout path. Secrets are
-// loaded from a specified JSON file that maps usernames to TOTP secrets.
+// Configuration options in BasicAuthTOTP provide flexibility in securing routes, and
+// managing session inactivity timeout. Secrets are loaded from a specified JSON file that maps
+// usernames to TOTP secrets.
 //
 // Example use case:
 // BasicAuthTOTP is ideal for protecting sensitive or restricted resources by requiring an
@@ -75,15 +75,6 @@ type BasicAuthTOTP struct {
 	// CookiePath specifies the path scope of the session cookie.
 	// This restricts where the cookie is sent on the server. Default is `/`.
 	CookiePath string `json:"cookie_path,omitempty"`
-
-	// LogoutSessionPath defines the URL path that triggers a session logout.
-	// When this path is accessed, the 2FA session cookie will be removed.
-	// Default is `/logout-session`.
-	LogoutSessionPath string `json:"logout_session_path,omitempty"`
-
-	// LogoutRedirectURL specifies the URL to redirect the user to after they log out of their 2FA session.
-	// This can be a landing page or login page where the user can re-authenticate. Default is `/`.
-	LogoutRedirectURL string `json:"logout_redirect_url,omitempty"`
 
 	// SignKey is the key used to sign the JWT tokens.
 	SignKey string `json:"sign_key,omitempty"`
@@ -128,12 +119,6 @@ func (m *BasicAuthTOTP) Provision(ctx caddy.Context) error {
 	if m.SessionInactivityTimeout == 0 {
 		m.SessionInactivityTimeout = 60 * time.Minute // Default inactivity timeout
 	}
-	if m.LogoutSessionPath == "" {
-		m.LogoutSessionPath = "/logout-session"
-	}
-	if m.LogoutRedirectURL == "" {
-		m.LogoutRedirectURL = "/"
-	}
 
 	// Log the chosen configuration values
 	m.logger.Info("BasicAuthTOTP plugin configured",
@@ -141,8 +126,6 @@ func (m *BasicAuthTOTP) Provision(ctx caddy.Context) error {
 		zap.String("SecretsFilePath", m.SecretsFilePath),
 		zap.String("CookieName", m.CookieName),
 		zap.String("CookiePath", m.CookiePath),
-		zap.String("LogoutSessionPath", m.LogoutSessionPath),
-		zap.String("LogoutRedirectURL", m.LogoutRedirectURL),
 		// SignKey is omitted from the log output for security reasons.
 	)
 	return nil
@@ -176,20 +159,6 @@ func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next c
 	repl, ok := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
 	if !ok {
 		return caddyhttp.Error(http.StatusInternalServerError, nil)
-	}
-
-	// Retrieve the unmodified request's original path (e.g., before handle_path stripped it).
-	// Fallback to the current request path if the request's original path is unavailable.
-	request_path := repl.ReplaceAll("{http.request.orig_uri.path}", r.URL.Path)
-
-	if request_path == m.LogoutSessionPath {
-		_, err := r.Cookie(m.CookieName)
-		if err == nil {
-			m.deleteJWTCookie(w)
-		}
-		// Redirect to the configured logout URL, or fallback to "/"
-		http.Redirect(w, r, m.LogoutRedirectURL, http.StatusSeeOther)
-		return nil
 	}
 
 	// Validate session and check IP consistency
