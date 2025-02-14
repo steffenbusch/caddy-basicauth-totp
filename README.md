@@ -2,7 +2,7 @@
 
 > [!Important]
 > With version v0.4.0 (released in February 2025) of this plugin, the server-side session management and the logout functionality were dropped in favor of JWT-based (JSON Web Token-based) session management. The configuration options `logout_session_path` and `logout_redirect_url` must be removed from your Caddy configuration.
-> A `sign_key` of at least 32 characters is now required to securely sign the tokens and ensure their integrity.
+> A base64-encoded `sign_key` of at least 32 bytes is now required to securely sign the tokens and ensure their integrity.
 
 The **BasicAuthTOTP** plugin for [Caddy](https://caddyserver.com) enhances Caddy's basic authentication with Time-based One-Time Password (TOTP) two-factor authentication (2FA).
 This module supplements `basic_auth` and does not replace it; therefore, `basic_auth` must be configured and active for this plugin to function correctly. It's adding an extra layer of security for web applications and services hosted with Caddy.
