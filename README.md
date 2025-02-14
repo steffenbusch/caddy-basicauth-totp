@@ -63,6 +63,7 @@ By default, the `basic_auth_totp` directive is ordered after `basic_auth` in the
             secrets_file_path /path/to/2fa-secrets.json
             cookie_name batotp_sess
             cookie_path /top-secret
+            sign_key AWhvKpXr0CYdbW+Da+bBDTBX5nyqYCTKGNWpC0CeWhY=
         }
 
         respond "Welcome, you have passed basic and TOTP authentication!"
@@ -101,7 +102,8 @@ By default, the `basic_auth_totp` directive is ordered after `basic_auth` in the
 - **`cookie_path`**: Sets the path scope of the session cookie, defining where it will be sent on the server. Default is `/`.
   - *Usage Tip*: Ensure this aligns with the URL path protected by `basic_auth`, as the cookie will only be sent to matching paths.
 
-- **`sign_key`**: The key used to sign the JWT tokens. Must be at least 32 characters long.
+- **`sign_key`**: The base64-encoded secret key used to sign the JWTs. This key will be decoded to bytes for JWT signing.
+  - *Usage Tip*: To create a secure base64-encoded sign key, you can use the command `openssl rand -base64 32`.  This command generates a random 32-byte key and encodes it in base64 format.
 
 ### Session Management Explanation
 

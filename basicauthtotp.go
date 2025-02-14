@@ -16,6 +16,7 @@ package basicauthtotp
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"sync"
@@ -76,8 +77,11 @@ type BasicAuthTOTP struct {
 	// This restricts where the cookie is sent on the server. Default is `/`.
 	CookiePath string `json:"cookie_path,omitempty"`
 
-	// SignKey is the key used to sign the JWT tokens.
+	// SignKey is the base64 encoded secret key used to sign the JWTs.
 	SignKey string `json:"sign_key,omitempty"`
+
+	// signKeyBytes is the base64 decoded secret key used to sign the JWTs.
+	signKeyBytes []byte
 
 	// loadedSecrets holds the map of user secrets, loaded from the SecretsFilePath JSON file.
 	// This map is populated when the file is read and accessed when validating TOTP codes.
@@ -120,6 +124,13 @@ func (m *BasicAuthTOTP) Provision(ctx caddy.Context) error {
 		m.SessionInactivityTimeout = 60 * time.Minute // Default inactivity timeout
 	}
 
+	var err error
+	m.signKeyBytes, err = base64.StdEncoding.DecodeString(string(m.SignKey))
+	if err != nil {
+		m.logger.Error("Failed to decode sign key", zap.Error(err))
+		return err
+	}
+
 	// Log the chosen configuration values
 	m.logger.Info("BasicAuthTOTP plugin configured",
 		zap.Duration("SessionInactivityTimeout", m.SessionInactivityTimeout),
@@ -136,14 +147,15 @@ func (m *BasicAuthTOTP) Validate() error {
 	if m.SessionInactivityTimeout <= 0 {
 		return fmt.Errorf("SessionInactivityTimeout must be a positive duration")
 	}
+
+	// Check if the base64 encoded sign key is set
 	if m.SignKey == "" {
 		return fmt.Errorf("SignKey must be defined")
 	}
-	if len(m.SignKey) < 32 {
-		return fmt.Errorf("SignKey must be at least 32 characters long")
-	}
-	if !isValidSignKeyFormat(m.SignKey) {
-		return fmt.Errorf("SignKey must contain only alphanumeric characters and special characters")
+
+	// Check if the base64 decoded sign key has an appropriate length
+	if len(m.signKeyBytes) < 32 { // 32 bytes is commonly recommended as a minimum for security
+		return fmt.Errorf("decoded sign key must be at least 32 bytes long, check the base64 encoded sign key")
 	}
 	return nil
 }
@@ -241,19 +253,6 @@ func getClientIP(ctx context.Context) string {
 		}
 	}
 	return ""
-}
-
-// isValidSignKeyFormat checks if the SignKey contains only valid characters.
-func isValidSignKeyFormat(key string) bool {
-	for _, char := range key {
-		if !((char >= 'a' && char <= 'z') ||
-			(char >= 'A' && char <= 'Z') ||
-			(char >= '0' && char <= '9') ||
-			(char == '-' || char == '_' || char == '+' || char == '/' || char == '=')) {
-			return false
-		}
-	}
-	return true
 }
 
 // Interface guards to ensure BasicAuthTOTP implements the necessary interfaces.

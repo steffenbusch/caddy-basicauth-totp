@@ -32,7 +32,7 @@ func (m *BasicAuthTOTP) createOrUpdateJWTCookie(w http.ResponseWriter, username,
 		"exp":      expiration.Unix(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	signedToken, err := token.SignedString([]byte(m.SignKey))
+	signedToken, err := token.SignedString(m.signKeyBytes)
 	if err != nil {
 		m.logger.Error("Failed to sign JWT", zap.Error(err))
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -69,7 +69,7 @@ func (m *BasicAuthTOTP) hasValidJWTCookie(w http.ResponseWriter, r *http.Request
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
-		return []byte(m.SignKey), nil
+		return m.signKeyBytes, nil
 	})
 	if err != nil {
 		m.logger.Error("Failed to parse JWT", zap.Error(err))
