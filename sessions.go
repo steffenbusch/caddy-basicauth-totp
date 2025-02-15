@@ -70,7 +70,7 @@ func (m *BasicAuthTOTP) hasValidJWTCookie(w http.ResponseWriter, r *http.Request
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
 		return m.signKeyBytes, nil
-	})
+	}, jwt.WithValidMethods([]string{"HS256"})) // Enforcing HS256 only
 	if err != nil {
 		m.logger.Error("Failed to parse JWT", zap.Error(err))
 		return false
