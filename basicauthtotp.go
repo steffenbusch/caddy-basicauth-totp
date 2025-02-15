@@ -190,13 +190,16 @@ func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next c
 		return nil
 	}
 
+	// Create logger with common fields
+	logger := m.logger.With(
+		zap.String("username", username),
+		zap.String("client_ip", clientIP),
+	)
+
 	totpCode := r.FormValue("totp_code")
 	// Check if the TOTP code is missing; if so, log and prompt for 2FA again.
 	if totpCode == "" {
-		m.logger.Warn("Missing TOTP code in POST",
-			zap.String("username", username),
-			zap.String("client_ip", clientIP),
-		)
+		logger.Warn("Missing TOTP code in POST")
 		m.show2FAForm(w, "")
 		return nil
 	}
@@ -206,11 +209,7 @@ func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next c
 	// log it and show an error message.
 	secret, err := m.getSecretForUser(username)
 	if err != nil {
-		m.logger.Warn("Failed to retrieve TOTP secret for user",
-			zap.String("username", username),
-			zap.String("client_ip", clientIP),
-			zap.Error(err),
-		)
+		logger.Warn("Failed to retrieve TOTP secret", zap.Error(err))
 		m.show2FAForm(w, "Authentication error. Please contact support.")
 		return nil
 	}
@@ -218,10 +217,7 @@ func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next c
 	// Validate the TOTP code with the user's secret.
 	// If validation fails, log an invalid TOTP attempt for monitoring tools like fail2ban.
 	if !totp.Validate(totpCode, secret) {
-		m.logger.Warn("Invalid TOTP attempt",
-			zap.String("username", username),
-			zap.String("client_ip", clientIP),
-		)
+		logger.Warn("Invalid TOTP attempt")
 		m.show2FAForm(w, "Invalid TOTP code. Please try again.")
 		return nil
 	}
@@ -234,7 +230,7 @@ func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next c
 	redirectURL := repl.ReplaceAll("{http.request.orig_uri}", r.URL.RequestURI())
 
 	// Log the final redirect decision for debugging purposes.
-	m.logger.Debug("Session ok, redirecting",
+	logger.Debug("Session ok, redirecting",
 		zap.String("redirect_url", redirectURL),
 		zap.String("current_request_uri", r.URL.RequestURI()),
 	)
