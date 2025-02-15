@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -173,8 +174,21 @@ func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next c
 		return caddyhttp.Error(http.StatusInternalServerError, nil)
 	}
 
-	// Validate session and check IP consistency
+	// Retrieve the client IP address from the Caddy context.
 	clientIP := getClientIP(r.Context())
+	// If the client IP is empty, extract it from the request's RemoteAddr.
+	if clientIP == "" {
+		m.logger.Warn("No client IP from getClientIP; using RemoteAddr.")
+		var err error
+		clientIP, _, err = net.SplitHostPort(r.RemoteAddr)
+		if err != nil {
+			m.logger.Warn("Failed to extract IP from RemoteAddr", zap.Error(err))
+			// Use the complete RemoteAddr string as the client IP as a last resort.
+			clientIP = r.RemoteAddr
+		}
+	}
+
+	// Validate session and check IP consistency
 	if m.hasValidJWTCookie(w, r, username, clientIP) {
 		return next.ServeHTTP(w, r)
 	}
