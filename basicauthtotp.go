@@ -175,18 +175,7 @@ func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next c
 	}
 
 	// Retrieve the client IP address from the Caddy context.
-	clientIP := getClientIP(r.Context())
-	// If the client IP is empty, extract it from the request's RemoteAddr.
-	if clientIP == "" {
-		m.logger.Warn("No client IP from getClientIP; using RemoteAddr.")
-		var err error
-		clientIP, _, err = net.SplitHostPort(r.RemoteAddr)
-		if err != nil {
-			m.logger.Warn("Failed to extract IP from RemoteAddr", zap.Error(err))
-			// Use the complete RemoteAddr string as the client IP as a last resort.
-			clientIP = r.RemoteAddr
-		}
-	}
+	clientIP := getClientIP(r.Context(), r.RemoteAddr)
 
 	// Validate session and check IP consistency
 	if m.hasValidJWTCookie(w, r, username, clientIP) {
@@ -255,14 +244,21 @@ func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next c
 }
 
 // getClientIP retrieves the client IP address directly from the Caddy context.
-func getClientIP(ctx context.Context) string {
+func getClientIP(ctx context.Context, remoteAddr string) string {
 	clientIP, ok := ctx.Value(caddyhttp.VarsCtxKey).(map[string]any)["client_ip"]
 	if ok {
 		if ip, valid := clientIP.(string); valid {
 			return ip
 		}
 	}
-	return ""
+	// If the client IP is empty, extract it from the request's RemoteAddr.
+	var err error
+	clientIP, _, err = net.SplitHostPort(remoteAddr)
+	if err != nil {
+		// Use the complete RemoteAddr string as a last resort.
+		clientIP = remoteAddr
+	}
+	return clientIP.(string)
 }
 
 // Interface guards to ensure BasicAuthTOTP implements the necessary interfaces.
