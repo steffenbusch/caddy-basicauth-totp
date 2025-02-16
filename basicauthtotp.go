@@ -16,7 +16,9 @@ package basicauthtotp
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -76,8 +78,11 @@ type BasicAuthTOTP struct {
 	// This restricts where the cookie is sent on the server. Default is `/`.
 	CookiePath string `json:"cookie_path,omitempty"`
 
-	// SignKey is the key used to sign the JWT tokens.
+	// SignKey is the base64 encoded secret key used to sign the JWTs.
 	SignKey string `json:"sign_key,omitempty"`
+
+	// signKeyBytes is the base64 decoded secret key used to sign the JWTs.
+	signKeyBytes []byte
 
 	// loadedSecrets holds the map of user secrets, loaded from the SecretsFilePath JSON file.
 	// This map is populated when the file is read and accessed when validating TOTP codes.
@@ -120,6 +125,13 @@ func (m *BasicAuthTOTP) Provision(ctx caddy.Context) error {
 		m.SessionInactivityTimeout = 60 * time.Minute // Default inactivity timeout
 	}
 
+	var err error
+	m.signKeyBytes, err = base64.StdEncoding.DecodeString(string(m.SignKey))
+	if err != nil {
+		m.logger.Error("Failed to decode sign key", zap.Error(err))
+		return err
+	}
+
 	// Log the chosen configuration values
 	m.logger.Info("BasicAuthTOTP plugin configured",
 		zap.Duration("SessionInactivityTimeout", m.SessionInactivityTimeout),
@@ -136,14 +148,15 @@ func (m *BasicAuthTOTP) Validate() error {
 	if m.SessionInactivityTimeout <= 0 {
 		return fmt.Errorf("SessionInactivityTimeout must be a positive duration")
 	}
+
+	// Check if the base64 encoded sign key is set
 	if m.SignKey == "" {
 		return fmt.Errorf("SignKey must be defined")
 	}
-	if len(m.SignKey) < 32 {
-		return fmt.Errorf("SignKey must be at least 32 characters long")
-	}
-	if !isValidSignKeyFormat(m.SignKey) {
-		return fmt.Errorf("SignKey must contain only alphanumeric characters and special characters")
+
+	// Check if the base64 decoded sign key has an appropriate length
+	if len(m.signKeyBytes) < 32 { // 32 bytes is commonly recommended as a minimum for security
+		return fmt.Errorf("decoded sign key must be at least 32 bytes long, check the base64 encoded sign key")
 	}
 	return nil
 }
@@ -161,8 +174,10 @@ func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next c
 		return caddyhttp.Error(http.StatusInternalServerError, nil)
 	}
 
+	// Retrieve the client IP address from the Caddy context.
+	clientIP := getClientIP(r.Context(), r.RemoteAddr)
+
 	// Validate session and check IP consistency
-	clientIP := getClientIP(r.Context())
 	if m.hasValidJWTCookie(w, r, username, clientIP) {
 		return next.ServeHTTP(w, r)
 	}
@@ -178,13 +193,16 @@ func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next c
 		return nil
 	}
 
+	// Create logger with common fields
+	logger := m.logger.With(
+		zap.String("username", username),
+		zap.String("client_ip", clientIP),
+	)
+
 	totpCode := r.FormValue("totp_code")
 	// Check if the TOTP code is missing; if so, log and prompt for 2FA again.
 	if totpCode == "" {
-		m.logger.Warn("Missing TOTP code in POST",
-			zap.String("username", username),
-			zap.String("client_ip", clientIP),
-		)
+		logger.Warn("Missing TOTP code in POST")
 		m.show2FAForm(w, "")
 		return nil
 	}
@@ -194,11 +212,7 @@ func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next c
 	// log it and show an error message.
 	secret, err := m.getSecretForUser(username)
 	if err != nil {
-		m.logger.Warn("Failed to retrieve TOTP secret for user",
-			zap.String("username", username),
-			zap.String("client_ip", clientIP),
-			zap.Error(err),
-		)
+		logger.Warn("Failed to retrieve TOTP secret", zap.Error(err))
 		m.show2FAForm(w, "Authentication error. Please contact support.")
 		return nil
 	}
@@ -206,10 +220,7 @@ func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next c
 	// Validate the TOTP code with the user's secret.
 	// If validation fails, log an invalid TOTP attempt for monitoring tools like fail2ban.
 	if !totp.Validate(totpCode, secret) {
-		m.logger.Warn("Invalid TOTP attempt",
-			zap.String("username", username),
-			zap.String("client_ip", clientIP),
-		)
+		logger.Warn("Invalid TOTP attempt")
 		m.show2FAForm(w, "Invalid TOTP code. Please try again.")
 		return nil
 	}
@@ -222,7 +233,7 @@ func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next c
 	redirectURL := repl.ReplaceAll("{http.request.orig_uri}", r.URL.RequestURI())
 
 	// Log the final redirect decision for debugging purposes.
-	m.logger.Debug("Session ok, redirecting",
+	logger.Debug("Session ok, redirecting",
 		zap.String("redirect_url", redirectURL),
 		zap.String("current_request_uri", r.URL.RequestURI()),
 	)
@@ -233,27 +244,21 @@ func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next c
 }
 
 // getClientIP retrieves the client IP address directly from the Caddy context.
-func getClientIP(ctx context.Context) string {
+func getClientIP(ctx context.Context, remoteAddr string) string {
 	clientIP, ok := ctx.Value(caddyhttp.VarsCtxKey).(map[string]any)["client_ip"]
 	if ok {
 		if ip, valid := clientIP.(string); valid {
 			return ip
 		}
 	}
-	return ""
-}
-
-// isValidSignKeyFormat checks if the SignKey contains only valid characters.
-func isValidSignKeyFormat(key string) bool {
-	for _, char := range key {
-		if !((char >= 'a' && char <= 'z') ||
-			(char >= 'A' && char <= 'Z') ||
-			(char >= '0' && char <= '9') ||
-			(char == '-' || char == '_' || char == '+' || char == '/' || char == '=')) {
-			return false
-		}
+	// If the client IP is empty, extract it from the request's RemoteAddr.
+	var err error
+	clientIP, _, err = net.SplitHostPort(remoteAddr)
+	if err != nil {
+		// Use the complete RemoteAddr string as a last resort.
+		clientIP = remoteAddr
 	}
-	return true
+	return clientIP.(string)
 }
 
 // Interface guards to ensure BasicAuthTOTP implements the necessary interfaces.

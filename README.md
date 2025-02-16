@@ -2,7 +2,7 @@
 
 > [!Important]
 > With version v0.4.0 (released in February 2025) of this plugin, the server-side session management and the logout functionality were dropped in favor of JWT-based (JSON Web Token-based) session management. The configuration options `logout_session_path` and `logout_redirect_url` must be removed from your Caddy configuration.
-> A `sign_key` of at least 32 characters is now required to securely sign the tokens and ensure their integrity.
+> With version v0.5.0 a **base64-encoded** `sign_key` of at least 32 bytes is now required to securely sign the tokens and ensure their integrity.
 
 The **BasicAuthTOTP** plugin for [Caddy](https://caddyserver.com) enhances Caddy's basic authentication with Time-based One-Time Password (TOTP) two-factor authentication (2FA).
 This module supplements `basic_auth` and does not replace it; therefore, `basic_auth` must be configured and active for this plugin to function correctly. It's adding an extra layer of security for web applications and services hosted with Caddy.
@@ -63,6 +63,7 @@ By default, the `basic_auth_totp` directive is ordered after `basic_auth` in the
             secrets_file_path /path/to/2fa-secrets.json
             cookie_name batotp_sess
             cookie_path /top-secret
+            sign_key AWhvKpXr0CYdbW+Da+bBDTBX5nyqYCTKGNWpC0CeWhY=
         }
 
         respond "Welcome, you have passed basic and TOTP authentication!"
@@ -101,7 +102,8 @@ By default, the `basic_auth_totp` directive is ordered after `basic_auth` in the
 - **`cookie_path`**: Sets the path scope of the session cookie, defining where it will be sent on the server. Default is `/`.
   - *Usage Tip*: Ensure this aligns with the URL path protected by `basic_auth`, as the cookie will only be sent to matching paths.
 
-- **`sign_key`**: The key used to sign the JWT tokens. Must be at least 32 characters long.
+- **`sign_key`**: The base64-encoded secret key used to sign the JWTs. This key will be decoded to bytes for JWT signing.
+  - *Usage Tip*: To create a secure base64-encoded sign key, you can use the command `openssl rand -base64 32`.  This command generates a random 32-byte key and encodes it in base64 format.
 
 ### Session Management Explanation
 

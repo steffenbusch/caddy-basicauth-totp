@@ -15,6 +15,7 @@
 package basicauthtotp
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -32,7 +33,7 @@ func (m *BasicAuthTOTP) createOrUpdateJWTCookie(w http.ResponseWriter, username,
 		"exp":      expiration.Unix(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	signedToken, err := token.SignedString([]byte(m.SignKey))
+	signedToken, err := token.SignedString(m.signKeyBytes)
 	if err != nil {
 		m.logger.Error("Failed to sign JWT", zap.Error(err))
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -65,42 +66,42 @@ func (m *BasicAuthTOTP) hasValidJWTCookie(w http.ResponseWriter, r *http.Request
 		return false
 	}
 
+	// Create logger with common fields
+	logger := m.logger.With(
+		zap.String("username", username),
+		zap.String("client_ip", clientIP),
+	)
+
 	token, err := jwt.Parse(cookie.Value, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
-		return []byte(m.SignKey), nil
-	})
+		return m.signKeyBytes, nil
+	}, jwt.WithValidMethods([]string{"HS256"})) // Enforcing HS256 only
 	if err != nil {
-		m.logger.Error("Failed to parse JWT", zap.Error(err))
+		if errors.Is(err, jwt.ErrTokenExpired) {
+			// Log JWT expiration as info
+			logger.Info("JWT has expired", zap.Error(err))
+		} else {
+			logger.Error("Failed to parse or validate JWT", zap.Error(err))
+		}
 		return false
 	}
 
 	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
 		if claims["username"] != username || claims["clientIP"] != clientIP {
-			m.logger.Warn("JWT does not match username or client IP",
-				zap.String("username", username),
-				zap.String("client_ip", clientIP),
+			logger.Warn("JWT does not match username or client IP",
 				zap.String("token_username", claims["username"].(string)),
 				zap.String("token_client_ip", claims["clientIP"].(string)),
 			)
 			return false
 		}
 
-		expiration := time.Unix(int64(claims["exp"].(float64)), 0)
-		if time.Now().After(expiration) {
-			m.logger.Debug("JWT has expired", zap.Time("expiration", expiration))
-			return false
-		}
-
 		// Extend session if less than 50% of inactivity timeout remains
+		expiration := time.Unix(int64(claims["exp"].(float64)), 0)
 		threshold := m.SessionInactivityTimeout / 2
 		if time.Until(expiration) < threshold {
-			m.logger.Debug("Extending session",
-				zap.String("username", username),
-				zap.String("client_ip", clientIP),
-				zap.Time("expiration", expiration),
-			)
+			logger.Debug("Extending session", zap.Time("expiration", expiration))
 			m.createOrUpdateJWTCookie(w, username, clientIP)
 		}
 
