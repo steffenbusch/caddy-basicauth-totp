@@ -56,17 +56,19 @@ func (m *BasicAuthTOTP) show2FAForm(w http.ResponseWriter, errorMessage string) 
 	}
 
 	var tmpl *template.Template
+	// Load the external custom HTML template if set
 	if m.TemplateFile != "" {
-		// Load the external custom HTML template
 		tmpl, err = template.ParseFiles(m.TemplateFile)
 		if err != nil {
-			m.logger.Error("failed to load custom 2FA form template",
+			m.logger.Error("failed to load custom 2FA form template, using default",
 				zap.String("template_path", m.TemplateFile),
 				zap.Error(err))
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-			return
 		}
-	} else {
+	}
+
+	// Use the default HTML template if no custom template is set
+	// or if there was an error loading the custom template
+	if m.TemplateFile == "" || err != nil {
 		// Parse the embedded HTML content
 		tmpl, err = template.New("2fa_form").Parse(Default2FAFormHTML)
 		if err != nil {
