@@ -151,7 +151,7 @@ func (m *BasicAuthTOTP) Provision(ctx caddy.Context) error {
 		zap.String("SecretsFilePath", m.SecretsFilePath),
 		zap.String("CookieName", m.CookieName),
 		zap.String("CookiePath", m.CookiePath),
-		zap.String("TemplateFile", m.FormTemplateFile),
+		zap.String("FormTemplateFile", m.FormTemplateFile),
 		// SignKey is omitted from the log output for security reasons.
 	)
 	return nil
