@@ -18,9 +18,10 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"html"
+	"html/template"
 	"net"
 	"net/http"
-	"os"
 	"sync"
 	"time"
 
@@ -82,6 +83,9 @@ type BasicAuthTOTP struct {
 	// Filename of the template to use instead of the embedded default template.
 	TemplateFile string `json:"template_file,omitempty"`
 
+	// template is the parsed HTML template used to render the 2FA form.
+	Template *template.Template
+
 	// SignKey is the base64 encoded secret key used to sign the JWTs.
 	SignKey string `json:"sign_key,omitempty"`
 
@@ -136,6 +140,11 @@ func (m *BasicAuthTOTP) Provision(ctx caddy.Context) error {
 		return err
 	}
 
+	// Provision the HTML template
+	if err = m.provisionTemplate(); err != nil {
+		return err
+	}
+
 	// Log the chosen configuration values
 	m.logger.Info("BasicAuthTOTP plugin configured",
 		zap.Duration("SessionInactivityTimeout", m.SessionInactivityTimeout),
@@ -164,15 +173,6 @@ func (m *BasicAuthTOTP) Validate() error {
 		return fmt.Errorf("decoded sign key must be at least 32 bytes long, check the base64 encoded sign key")
 	}
 
-	// Check if the template file exists and is readable
-	if m.TemplateFile != "" {
-		if _, err := os.Stat(m.TemplateFile); os.IsNotExist(err) {
-			m.logger.Warn("Template file does not exist", zap.String("template_file", m.TemplateFile))
-		} else if err != nil {
-			m.logger.Warn("Failed to read template file", zap.String("template_file", m.TemplateFile), zap.Error(err))
-		}
-	}
-
 	return nil
 }
 
@@ -197,8 +197,14 @@ func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next c
 		return next.ServeHTTP(w, r)
 	}
 
+	// Initialize FormData with the html escaped username
+	username = html.EscapeString(username)
+	formData := FormData{
+		Username: username,
+	}
+
 	if r.Method != http.MethodPost {
-		m.show2FAForm(w, "")
+		m.show2FAForm(w, formData)
 		return nil
 	}
 
@@ -218,7 +224,7 @@ func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next c
 	// Check if the TOTP code is missing; if so, log and prompt for 2FA again.
 	if totpCode == "" {
 		logger.Warn("Missing TOTP code in POST")
-		m.show2FAForm(w, "")
+		m.show2FAForm(w, formData)
 		return nil
 	}
 
@@ -228,7 +234,8 @@ func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next c
 	secret, err := m.getSecretForUser(username)
 	if err != nil {
 		logger.Warn("Failed to retrieve TOTP secret", zap.Error(err))
-		m.show2FAForm(w, "Authentication error. Please contact support.")
+		formData.ErrorMessage = "Authentication error. Please contact support."
+		m.show2FAForm(w, formData)
 		return nil
 	}
 
@@ -236,7 +243,8 @@ func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next c
 	// If validation fails, log an invalid TOTP attempt for monitoring tools like fail2ban.
 	if !totp.Validate(totpCode, secret) {
 		logger.Warn("Invalid TOTP attempt")
-		m.show2FAForm(w, "Invalid TOTP code. Please try again.")
+		formData.ErrorMessage = "Invalid TOTP code. Please try again."
+		m.show2FAForm(w, formData)
 		return nil
 	}
 
