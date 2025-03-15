@@ -199,7 +199,7 @@ func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next c
 
 	// Initialize FormData with the html escaped username
 	username = html.EscapeString(username)
-	formData := FormData{
+	formData := formData{
 		Username: username,
 	}
 

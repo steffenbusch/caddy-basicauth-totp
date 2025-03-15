@@ -32,8 +32,8 @@ import (
 //go:embed default-2fa-form.html
 var default2FAFormHTML string
 
-// FormData holds the data to be passed to the 2FA form template
-type FormData struct {
+// formData holds the data to be passed to the 2FA form template
+type formData struct {
 	Nonce        string
 	ErrorMessage string
 	Username     string
@@ -79,7 +79,7 @@ func (m *BasicAuthTOTP) provisionTemplate() error {
 // show2FAForm displays a styled 2FA form with an error message if provided.
 // It generates a nonce for the Content-Security-Policy and uses either a custom
 // or default HTML template to render the form.
-func (m *BasicAuthTOTP) show2FAForm(w http.ResponseWriter, formData FormData) {
+func (m *BasicAuthTOTP) show2FAForm(w http.ResponseWriter, formData formData) {
 	// Generate a nonce for this request
 	nonce, err := generateNonce()
 	if err != nil {
