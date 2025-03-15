@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -77,6 +78,9 @@ type BasicAuthTOTP struct {
 	// CookiePath specifies the path scope of the session cookie.
 	// This restricts where the cookie is sent on the server. Default is `/`.
 	CookiePath string `json:"cookie_path,omitempty"`
+
+	// Filename of the template to use instead of the embedded default template.
+	TemplateFile string `json:"template_file,omitempty"`
 
 	// SignKey is the base64 encoded secret key used to sign the JWTs.
 	SignKey string `json:"sign_key,omitempty"`
@@ -138,6 +142,7 @@ func (m *BasicAuthTOTP) Provision(ctx caddy.Context) error {
 		zap.String("SecretsFilePath", m.SecretsFilePath),
 		zap.String("CookieName", m.CookieName),
 		zap.String("CookiePath", m.CookiePath),
+		zap.String("TemplateFile", m.TemplateFile),
 		// SignKey is omitted from the log output for security reasons.
 	)
 	return nil
@@ -158,6 +163,16 @@ func (m *BasicAuthTOTP) Validate() error {
 	if len(m.signKeyBytes) < 32 { // 32 bytes is commonly recommended as a minimum for security
 		return fmt.Errorf("decoded sign key must be at least 32 bytes long, check the base64 encoded sign key")
 	}
+
+	// Check if the template file exists and is readable
+	if m.TemplateFile != "" {
+		if _, err := os.Stat(m.TemplateFile); os.IsNotExist(err) {
+			m.logger.Warn("Template file does not exist", zap.String("template_file", m.TemplateFile))
+		} else if err != nil {
+			m.logger.Warn("Failed to read template file", zap.String("template_file", m.TemplateFile), zap.Error(err))
+		}
+	}
+
 	return nil
 }
 

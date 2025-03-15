@@ -63,6 +63,8 @@ func (m *BasicAuthTOTP) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				m.CookieName = arg
 			case "cookie_path":
 				m.CookiePath = arg
+			case "template_file":
+				m.TemplateFile = arg
 			case "sign_key":
 				m.SignKey = arg
 			case "logout_session_path":
