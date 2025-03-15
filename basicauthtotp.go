@@ -80,8 +80,8 @@ type BasicAuthTOTP struct {
 	// This restricts where the cookie is sent on the server. Default is `/`.
 	CookiePath string `json:"cookie_path,omitempty"`
 
-	// Filename of the template to use instead of the embedded default template.
-	TemplateFile string `json:"template_file,omitempty"`
+	// Filename of the custom template to use instead of the embedded default template.
+	FormTemplateFile string `json:"form_template,omitempty"`
 
 	// template is the parsed HTML template used to render the 2FA form.
 	Template *template.Template
@@ -151,7 +151,7 @@ func (m *BasicAuthTOTP) Provision(ctx caddy.Context) error {
 		zap.String("SecretsFilePath", m.SecretsFilePath),
 		zap.String("CookieName", m.CookieName),
 		zap.String("CookiePath", m.CookiePath),
-		zap.String("TemplateFile", m.TemplateFile),
+		zap.String("TemplateFile", m.FormTemplateFile),
 		// SignKey is omitted from the log output for security reasons.
 	)
 	return nil

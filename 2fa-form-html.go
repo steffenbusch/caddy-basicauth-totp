@@ -26,7 +26,7 @@ import (
 
 // default2FAFormHTML contains the default HTML content for the 2FA form.
 // By default, its value is an embedded document. To configure a custom
-// HTML form, set Caddyfile directive `template_file` to the path of
+// HTML form, set Caddyfile subdirective `form_template` to the path of
 // an external HTML file.
 //
 //go:embed default-2fa-form.html
@@ -53,18 +53,18 @@ func generateNonce() (string, error) {
 func (m *BasicAuthTOTP) provisionTemplate() error {
 	var err error
 	// Load the external custom HTML template if set
-	if m.TemplateFile != "" {
-		m.Template, err = template.ParseFiles(m.TemplateFile)
+	if m.FormTemplateFile != "" {
+		m.Template, err = template.ParseFiles(m.FormTemplateFile)
 		if err != nil {
 			m.logger.Warn("failed to load custom 2FA form template, using default",
-				zap.String("template_path", m.TemplateFile),
+				zap.String("template_path", m.FormTemplateFile),
 				zap.Error(err))
 		}
 	}
 
 	// Use the default HTML template if no custom template is set
 	// or if there was an error loading the custom template
-	if m.TemplateFile == "" || err != nil {
+	if m.FormTemplateFile == "" || err != nil {
 		// Parse the embedded HTML content
 		m.Template, err = template.New("2fa_form").Parse(default2FAFormHTML)
 		if err != nil {
