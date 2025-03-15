@@ -84,7 +84,7 @@ type BasicAuthTOTP struct {
 	FormTemplateFile string `json:"form_template,omitempty"`
 
 	// template is the parsed HTML template used to render the 2FA form.
-	Template *template.Template
+	formTemplate *template.Template
 
 	// SignKey is the base64 encoded secret key used to sign the JWTs.
 	SignKey string `json:"sign_key,omitempty"`
