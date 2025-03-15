@@ -134,7 +134,7 @@ func (m *BasicAuthTOTP) Provision(ctx caddy.Context) error {
 	}
 
 	var err error
-	m.signKeyBytes, err = base64.StdEncoding.DecodeString(string(m.SignKey))
+	m.signKeyBytes, err = base64.StdEncoding.DecodeString(m.SignKey)
 	if err != nil {
 		m.logger.Error("Failed to decode sign key", zap.Error(err))
 		return err
