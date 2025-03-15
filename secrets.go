@@ -70,5 +70,8 @@ func (m *BasicAuthTOTP) getSecretForUser(username string) (string, error) {
 	if !exists {
 		return "", fmt.Errorf("no TOTP secret found for user %s", username)
 	}
+	if secret == "" {
+		return "", fmt.Errorf("TOTP secret for user %s is empty", username)
+	}
 	return secret, nil
 }
