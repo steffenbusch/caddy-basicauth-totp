@@ -149,7 +149,7 @@ If you want to set up the secret directly in a 2FA app, you can also generate a 
 - **Cookie Security**: The session cookie is set with `HttpOnly`, `Secure`, and `SameSite=Lax` attributes. These settings help prevent attacks, but `SameSite` is not currently configurable.
 - **Brute-Force Attack Prevention and Logging**: To help prevent brute-force attempts on TOTP codes, the plugin logs each invalid TOTP attempt with the username and client IP, such as:
 
-    `2024/11/01 08:08:36.099 WARN    http.handlers.basicauth2fa      Invalid TOTP attempt    {"username": "user1", "client_ip": "4.8.15.16"}`
+    `2024/11/01 08:08:36.099 WARN    http.handlers.basicauthtotp      Invalid TOTP attempt    {"username": "user1", "client_ip": "4.8.15.16"}`
 
     This log entry provides crucial information for security monitoring and can be used with `fail2ban` or similar tools to block repeated failed attempts.
 - **TOTP Validation Settings**: The plugin uses TOTP validation settings compatible with Google Authenticator, including:
