@@ -78,9 +78,9 @@
             <input type="text" id="totp_code" name="totp_code" size="30" maxlength="6" required autofocus>
             <button type="submit">Submit</button>
         </form>
-        {{ if .ErrorMessage }}
+        {{- if .ErrorMessage }}
         <p class="error-message">{{ .ErrorMessage }}</p>
-        {{ end }}
+        {{- end }}
     </div>
 </body>
 </html>
