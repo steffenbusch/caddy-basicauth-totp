@@ -2,3 +2,4 @@
 /Caddyfile
 /2fa-secrets-example.json
 /2fa-form-custom.html
+/jwt-secret.txt
