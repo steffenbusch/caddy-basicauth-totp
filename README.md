@@ -106,7 +106,8 @@ By default, the `basic_auth_totp` directive is ordered after `basic_auth` in the
 - **`form_template`**: Path to the HTML template file for the 2FA authentication page. If not specified, an embedded default template `default-2fa-form.html` will be used.
 
 - **`sign_key`**: The base64-encoded secret key used to sign the JWTs. This key will be decoded to bytes for JWT signing.
-  - *Usage Tip*: To create a secure base64-encoded sign key, you can use the command `openssl rand -base64 32`.  This command generates a random 32-byte key and encodes it in base64 format.
+  - *Usage Tip*: To create a secure base64-encoded sign key, you can use the command `openssl rand -base64 32`. This command generates a random 32-byte key and encodes it in base64 format.
+  - *Placeholder Support*: You can also use a placeholder to reference a file containing the key, such as `{file./path/to/jwt-secret.txt}`. The file's content will be read and used as the signing key.
 
 ### Template Context
 
