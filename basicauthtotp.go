@@ -116,6 +116,7 @@ func (BasicAuthTOTP) CaddyModule() caddy.ModuleInfo {
 // Provision sets up the module, initializes the logger, and applies default values.
 func (m *BasicAuthTOTP) Provision(ctx caddy.Context) error {
 	m.logger = ctx.Logger()
+	repl := caddy.NewReplacer()
 
 	// Initialize the mutex if it's nil
 	if m.secretsLoadMutex == nil {
@@ -132,6 +133,9 @@ func (m *BasicAuthTOTP) Provision(ctx caddy.Context) error {
 	if m.SessionInactivityTimeout == 0 {
 		m.SessionInactivityTimeout = 60 * time.Minute // Default inactivity timeout
 	}
+
+	// Replace placeholders in the SignKey such as {file./path/to/jwt-secret.txt}
+	m.SignKey = repl.ReplaceAll(m.SignKey, "")
 
 	var err error
 	m.signKeyBytes, err = base64.StdEncoding.DecodeString(m.SignKey)
