@@ -29,6 +29,7 @@ import (
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
+	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
 )
 
@@ -186,8 +187,9 @@ func (m *BasicAuthTOTP) Validate() error {
 	}
 
 	// Validate TOTPCodeLength
-	if m.TOTPCodeLength < 4 || m.TOTPCodeLength > 10 {
-		return fmt.Errorf("TOTPCodeLength must be between 4 and 10")
+	// Only allow 6 or 8 digits for TOTP codes
+	if m.TOTPCodeLength != int(otp.DigitsSix) && m.TOTPCodeLength != int(otp.DigitsEight) {
+		return fmt.Errorf("TOTPCodeLength must be 6 or 8")
 	}
 
 	return nil
@@ -231,13 +233,22 @@ func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next c
 	secret, codeLength, err := m.getSecretForUser(username)
 	if err != nil {
 		logger.Error("Failed to retrieve TOTP secret", zap.Error(err))
-		formData.ErrorMessage = "Authentication error. Please contact support."
+		formData.ErrorMessage = "Invalid TOTP configuration. Please contact support."
 		m.show2FAForm(w, formData)
 		return nil
 	}
 
+	// If codeLength is not set in the user secrets file, use the module's configured TOTP code length.
 	if codeLength == 0 {
 		codeLength = m.TOTPCodeLength
+	}
+
+	// Only allow 6 or 8 digits for per-user code length
+	if codeLength != int(otp.DigitsSix) && codeLength != int(otp.DigitsEight) {
+		logger.Error("Invalid per-user TOTP code length", zap.Int("code_length", codeLength))
+		formData.ErrorMessage = "Invalid TOTP configuration. Please contact support."
+		m.show2FAForm(w, formData)
+		return nil
 	}
 	formData.TOTPCodeLength = codeLength
 
@@ -261,9 +272,16 @@ func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next c
 	}
 
 	// Validate the TOTP code with the user's secret and code length.
-	// If validation fails, log an invalid TOTP attempt for monitoring tools like fail2ban.
-	if len(totpCode) != codeLength || !totp.Validate(totpCode, secret) {
-		logger.Warn("Invalid TOTP attempt")
+	opts := totp.ValidateOpts{
+		Period:    30,
+		Skew:      1,
+		Digits:    otp.Digits(codeLength),
+		Algorithm: otp.AlgorithmSHA1,
+	}
+	valid, err := totp.ValidateCustom(totpCode, secret, time.Now().UTC(), opts)
+	if !valid || err != nil {
+		// If validation fails, log an invalid TOTP attempt for monitoring tools like fail2ban.
+		logger.Warn("Invalid TOTP attempt", zap.Error(err))
 		formData.ErrorMessage = "Invalid TOTP code. Please try again."
 		m.show2FAForm(w, formData)
 		return nil
