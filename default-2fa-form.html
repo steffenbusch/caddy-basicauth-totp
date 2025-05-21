@@ -80,12 +80,12 @@
                 id="totp_code"
                 name="totp_code"
                 size="30"
-                minlength="6"
-                maxlength="6"
-                pattern="\d{6}"
+                minlength="{{ .TOTPCodeLength }}"
+                maxlength="{{ .TOTPCodeLength }}"
+                pattern="\d{{printf "{%d}" .TOTPCodeLength}}"
                 autocomplete="one-time-code"
                 inputmode="numeric"
-                title="Format: exactly 6 digits (0-9)"
+                title="Format: exactly {{ .TOTPCodeLength }} digits (0-9)"
                 required
                 autofocus
             >

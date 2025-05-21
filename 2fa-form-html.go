@@ -34,9 +34,10 @@ var default2FAFormHTML string
 
 // formData holds the data to be passed to the 2FA form template
 type formData struct {
-	Nonce        string
-	ErrorMessage string
-	Username     string
+	Nonce          string
+	ErrorMessage   string
+	Username       string
+	TOTPCodeLength int
 }
 
 // generateNonce generates a random base64 nonce

@@ -83,6 +83,9 @@ type BasicAuthTOTP struct {
 	// Filename of the custom template to use instead of the embedded default template.
 	FormTemplateFile string `json:"form_template,omitempty"`
 
+	// TOTPCodeLength defines the expected length of the TOTP code (default: 6).
+	TOTPCodeLength int `json:"totp_code_length,omitempty"`
+
 	// template is the parsed HTML template used to render the 2FA form.
 	formTemplate *template.Template
 
@@ -92,11 +95,11 @@ type BasicAuthTOTP struct {
 	// signKeyBytes is the base64 decoded secret key used to sign the JWTs.
 	signKeyBytes []byte
 
-	// loadedSecrets holds the map of user secrets, loaded from the SecretsFilePath JSON file.
+	// loadedUserSecrets holds the map of user secrets and TOTP code lengths, loaded from the SecretsFilePath JSON file.
 	// This map is populated when the file is read and accessed when validating TOTP codes.
-	loadedSecrets map[string]string
+	loadedUserSecrets map[string]userSecretEntry
 
-	// secretsLoadMutex is used to synchronize access to the loadedSecrets map.
+	// secretsLoadMutex is used to synchronize access to the loadedSecrets and loadedUserSecrets maps.
 	// This prevents race conditions when loading or accessing user secrets.
 	secretsLoadMutex *sync.Mutex
 
@@ -133,6 +136,10 @@ func (m *BasicAuthTOTP) Provision(ctx caddy.Context) error {
 	if m.SessionInactivityTimeout == 0 {
 		m.SessionInactivityTimeout = 60 * time.Minute // Default inactivity timeout
 	}
+	// Set default TOTP code length if not provided
+	if m.TOTPCodeLength == 0 {
+		m.TOTPCodeLength = 6
+	}
 
 	// Replace placeholders in the SignKey such as {file./path/to/jwt-secret.txt}
 	m.SignKey = repl.ReplaceAll(m.SignKey, "")
@@ -153,6 +160,7 @@ func (m *BasicAuthTOTP) Provision(ctx caddy.Context) error {
 	m.logger.Info("BasicAuthTOTP plugin configured",
 		zap.Duration("SessionInactivityTimeout", m.SessionInactivityTimeout),
 		zap.String("SecretsFilePath", m.SecretsFilePath),
+		zap.Int("TOTPCodeLength", m.TOTPCodeLength),
 		zap.String("CookieName", m.CookieName),
 		zap.String("CookiePath", m.CookiePath),
 		zap.String("FormTemplateFile", m.FormTemplateFile),
@@ -177,6 +185,11 @@ func (m *BasicAuthTOTP) Validate() error {
 		return fmt.Errorf("decoded sign key must be at least 32 bytes long, check the base64 encoded sign key")
 	}
 
+	// Validate TOTPCodeLength
+	if m.TOTPCodeLength < 4 || m.TOTPCodeLength > 10 {
+		return fmt.Errorf("TOTPCodeLength must be between 4 and 10")
+	}
+
 	return nil
 }
 
@@ -196,16 +209,37 @@ func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next c
 	// Retrieve the client IP address from the Caddy context.
 	clientIP := getClientIP(r.Context(), r.RemoteAddr)
 
+	// Create logger with common fields
+	logger := m.logger.With(
+		zap.String("username", username),
+		zap.String("client_ip", clientIP),
+	)
+
 	// Validate session and check IP consistency
 	if m.hasValidJWTCookie(w, r, username, clientIP) {
 		return next.ServeHTTP(w, r)
 	}
 
 	// Initialize FormData with the html escaped username
-	username = html.EscapeString(username)
 	formData := formData{
-		Username: username,
+		Username: html.EscapeString(username),
 	}
+
+	// Attempt to retrieve the TOTP secret for the user.
+	// If an error occurs while fetching the secret (e.g., if no TOTP secret is set for the user),
+	// log it and show an error message.
+	secret, codeLength, err := m.getSecretForUser(username)
+	if err != nil {
+		logger.Error("Failed to retrieve TOTP secret", zap.Error(err))
+		formData.ErrorMessage = "Authentication error. Please contact support."
+		m.show2FAForm(w, formData)
+		return nil
+	}
+
+	if codeLength == 0 {
+		codeLength = m.TOTPCodeLength
+	}
+	formData.TOTPCodeLength = codeLength
 
 	if r.Method != http.MethodPost {
 		m.show2FAForm(w, formData)
@@ -218,12 +252,6 @@ func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next c
 		return nil
 	}
 
-	// Create logger with common fields
-	logger := m.logger.With(
-		zap.String("username", username),
-		zap.String("client_ip", clientIP),
-	)
-
 	totpCode := r.FormValue("totp_code")
 	// Check if the TOTP code is missing; if so, log and prompt for 2FA again.
 	if totpCode == "" {
@@ -232,20 +260,9 @@ func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next c
 		return nil
 	}
 
-	// Attempt to retrieve the TOTP secret for the user.
-	// If an error occurs while fetching the secret (e.g., if no TOTP secret is set for the user),
-	// log it and show an error message.
-	secret, err := m.getSecretForUser(username)
-	if err != nil {
-		logger.Warn("Failed to retrieve TOTP secret", zap.Error(err))
-		formData.ErrorMessage = "Authentication error. Please contact support."
-		m.show2FAForm(w, formData)
-		return nil
-	}
-
-	// Validate the TOTP code with the user's secret.
+	// Validate the TOTP code with the user's secret and code length.
 	// If validation fails, log an invalid TOTP attempt for monitoring tools like fail2ban.
-	if !totp.Validate(totpCode, secret) {
+	if len(totpCode) != codeLength || !totp.Validate(totpCode, secret) {
 		logger.Warn("Invalid TOTP attempt")
 		formData.ErrorMessage = "Invalid TOTP code. Please try again."
 		m.show2FAForm(w, formData)
