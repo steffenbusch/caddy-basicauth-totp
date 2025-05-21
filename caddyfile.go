@@ -73,6 +73,9 @@ func (m *BasicAuthTOTP) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				if err != nil {
 					return d.Errf("invalid totp_code_length: must be an integer")
 				}
+				if !isValidTOTPCodeLength(length) {
+					return d.Errf("invalid totp_code_length: eiher 6 or 8 digits are allowed")
+				}
 				m.TOTPCodeLength = length
 			case "logout_session_path":
 			case "logout_redirect_url":

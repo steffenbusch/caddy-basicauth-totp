@@ -56,6 +56,14 @@ func TestUnmarshalCaddyfile_TOTPCodeLength(t *testing.T) {
 			}`,
 			wantLen: 0, // default, not set
 		},
+		{
+			name: "invalid 7 digits",
+			input: `
+			basic_auth_totp {
+				totp_code_length 7
+			}`,
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
