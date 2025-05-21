@@ -75,7 +75,20 @@
         <p>Please enter your 2FA code to continue.</p>
         <form method="POST" action="">
             <label for="totp_code">2FA Code:</label>
-            <input type="text" id="totp_code" name="totp_code" size="30" maxlength="6" required autofocus>
+            <input
+                type="text"
+                id="totp_code"
+                name="totp_code"
+                size="30"
+                minlength="{{ .TOTPCodeLength }}"
+                maxlength="{{ .TOTPCodeLength }}"
+                pattern="\d{{printf "{%d}" .TOTPCodeLength}}"
+                autocomplete="one-time-code"
+                inputmode="numeric"
+                title="Format: exactly {{ .TOTPCodeLength }} digits (0-9)"
+                required
+                autofocus
+            >
             <button type="submit">Submit</button>
         </form>
         {{- if .ErrorMessage }}

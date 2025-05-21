@@ -16,6 +16,7 @@ package basicauthtotp
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/caddyserver/caddy/v2"
@@ -67,6 +68,15 @@ func (m *BasicAuthTOTP) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				m.FormTemplateFile = arg
 			case "sign_key":
 				m.SignKey = arg
+			case "totp_code_length":
+				length, err := strconv.Atoi(arg)
+				if err != nil {
+					return d.Errf("invalid totp_code_length: must be an integer")
+				}
+				if !isValidTOTPCodeLength(length) {
+					return d.Errf("invalid totp_code_length: eiher 6 or 8 digits are allowed")
+				}
+				m.TOTPCodeLength = length
 			case "logout_session_path":
 			case "logout_redirect_url":
 				return d.Errf("logout support was dropped. Remove subdirective %s", param)

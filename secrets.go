@@ -18,60 +18,59 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-
-	"go.uber.org/zap"
 )
 
-// UserSecret and UsersFile define structures for handling TOTP secrets.
-type UserSecret struct {
-	Username string `json:"username"`
-	Secret   string `json:"secret"`
+// userSecretEntry represents a single user's TOTP secret and optional code length.
+type userSecretEntry struct {
+	Username   string `json:"username"`
+	Secret     string `json:"secret"`
+	CodeLength int    `json:"code_length,omitempty"`
 }
 
-type UsersFile struct {
-	Users []UserSecret `json:"users"`
+// secretsFileFormat represents the structure of the secrets JSON file.
+type secretsFileFormat struct {
+	Users []userSecretEntry `json:"users"`
 }
 
-// loadSecrets loads secrets from the specified JSON file.
-func (m *BasicAuthTOTP) loadSecrets() error {
-	m.secretsLoadMutex.Lock()
-	defer m.secretsLoadMutex.Unlock()
-
-	if m.loadedSecrets != nil {
-		return nil // Secrets are already loaded
-	}
-
-	file, err := os.Open(m.SecretsFilePath)
+// loadSecretsFile loads the secrets file and populates loadedUserSecrets.
+func (m *BasicAuthTOTP) loadSecretsFile() error {
+	data, err := os.ReadFile(m.SecretsFilePath)
 	if err != nil {
-		m.logger.Error("could not open secrets file", zap.String("file", m.SecretsFilePath), zap.Error(err))
-		return fmt.Errorf("could not open secrets file: %v", err)
+		return fmt.Errorf("failed to read secrets file: %w", err)
 	}
-	defer file.Close()
-
-	var usersFile UsersFile
-	if err := json.NewDecoder(file).Decode(&usersFile); err != nil {
-		m.logger.Error("could not decode secrets file", zap.String("file", m.SecretsFilePath), zap.Error(err))
-		return fmt.Errorf("could not decode secrets file: %v", err)
+	var secrets secretsFileFormat
+	if err := json.Unmarshal(data, &secrets); err != nil {
+		return fmt.Errorf("failed to unmarshal secrets file: %w", err)
 	}
-
-	m.loadedSecrets = make(map[string]string)
-	for _, user := range usersFile.Users {
-		m.loadedSecrets[user.Username] = user.Secret
+	m.loadedUserSecrets = make(map[string]userSecretEntry)
+	for _, entry := range secrets.Users {
+		m.loadedUserSecrets[entry.Username] = entry
 	}
 	return nil
 }
 
-// getSecretForUser retrieves the user's TOTP secret from the loaded secrets map.
-func (m *BasicAuthTOTP) getSecretForUser(username string) (string, error) {
-	if err := m.loadSecrets(); err != nil {
-		return "", err
+// getSecretForUser returns the TOTP secret and code length for a user.
+func (m *BasicAuthTOTP) getSecretForUser(username string) (secret string, codeLength int, err error) {
+	m.secretsLoadMutex.Lock()
+	defer m.secretsLoadMutex.Unlock()
+	if m.loadedUserSecrets == nil {
+		// Load secrets from file
+		if err := m.loadSecretsFile(); err != nil {
+			return "", 0, err
+		}
 	}
-	secret, exists := m.loadedSecrets[username]
-	if !exists {
-		return "", fmt.Errorf("no TOTP secret found for user %s", username)
+	entry, ok := m.loadedUserSecrets[username]
+	if !ok {
+		return "", 0, fmt.Errorf("no TOTP secret found for user %s", username)
 	}
+	secret = entry.Secret
 	if secret == "" {
-		return "", fmt.Errorf("TOTP secret for user %s is empty", username)
+		return "", 0, fmt.Errorf("TOTP secret for user %s is empty", username)
 	}
-	return secret, nil
+	if entry.CodeLength > 0 {
+		codeLength = entry.CodeLength
+	} else {
+		codeLength = m.TOTPCodeLength
+	}
+	return secret, codeLength, nil
 }

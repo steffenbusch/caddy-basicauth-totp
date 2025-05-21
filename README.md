@@ -3,6 +3,7 @@
 > [!Important]
 > With version v0.4.0 (released in February 2025) of this plugin, the server-side session management and the logout functionality were dropped in favor of JWT-based (JSON Web Token-based) session management. The configuration options `logout_session_path` and `logout_redirect_url` must be removed from your Caddy configuration.
 > With version v0.5.0 a **base64-encoded** `sign_key` of at least 32 bytes is now required to securely sign the tokens and ensure their integrity.
+> With version v0.8.0 you can now specify the TOTP code length globally via the `totp_code_length` option or per user in the secrets JSON file (see below).
 
 The **BasicAuthTOTP** plugin for [Caddy](https://caddyserver.com) enhances Caddy's basic authentication with Time-based One-Time Password (TOTP) two-factor authentication (2FA).
 This module supplements `basic_auth` and does not replace it; therefore, `basic_auth` must be configured and active for this plugin to function correctly. It's adding an extra layer of security for web applications and services hosted with Caddy.
@@ -17,6 +18,7 @@ This module supplements `basic_auth` and does not replace it; therefore, `basic_
 This plugin introduces additional authentication steps within Caddy configurations:
 
 - **TOTP Authentication**: Requires users to enter a valid TOTP code in addition to basic auth credentials.
+- **Configurable TOTP Code Length**: You can set the required TOTP code length globally (e.g. 6 or 8 digits) or override it per user in the secrets file.
 - **JWT-based session management** with configurable inactivity-based expiration and IP-based session validation to prevent session hijacking.
 
 Instead of server-side session management, this module uses JWTs stored in cookies to manage sessions. This approach simplifies session handling and no sessions are lost when Caddy is reloaded or restarted. However, this approach is less secure than server-side session management, as JWTs are not invalidated or blacklisted. To mitigate risks, the module uses IP binding to ensure that the JWT is only valid for the client IP address that created it. If the client IP changes, the user must re-authenticate.
@@ -65,6 +67,7 @@ By default, the `basic_auth_totp` directive is ordered after `basic_auth` in the
             cookie_path /top-secret
             form_template /path/to/custom-2fa-form-template.html
             sign_key AWhvKpXr0CYdbW+Da+bBDTBX5nyqYCTKGNWpC0CeWhY=
+            totp_code_length 8
         }
 
         respond "Welcome, you have passed basic and TOTP authentication!"
@@ -78,36 +81,36 @@ By default, the `basic_auth_totp` directive is ordered after `basic_auth` in the
   - *Usage Tip*: A shorter inactivity timeout improves security by prompting for re-authentication if users are inactive, while a longer timeout enhances convenience for active users.
 
 - **`secrets_file_path`**: Specifies the path to a JSON file containing TOTP secrets for each user, required for validating TOTP codes.
-
-  - Example JSON structure:
-
-  ```json
-    {
-    "users": [
-      {
-        "username": "user1",
-        "secret": "F2MV5KORBGRG5GTEUKHKF3YJYXJPC45PS7YHVV4GFIIWEYQE"
-      },
-      {
-        "username": "user2",
-        "secret": "BABC3SA2W523ZMLXH73IN46FBWJPEKLLPPL53AO44LWFIS5T"
-      }
-    ]
-  }
-  ```
-
-  Each user should have a unique TOTP secret, formatted in **Base32** without padding (`=`). This key will later be used by a TOTP-compatible app (such as Google Authenticator or Authy) to generate time-based one-time passwords.
-
 - **`cookie_name`**: Defines a custom name for the session cookie that stores the 2FA token. Default is `batotp_sess`.
-
 - **`cookie_path`**: Sets the path scope of the session cookie, defining where it will be sent on the server. Default is `/`.
-  - *Usage Tip*: Ensure this aligns with the URL path protected by `basic_auth`, as the cookie will only be sent to matching paths.
-
 - **`form_template`**: Path to the HTML template file for the 2FA authentication page. If not specified, an embedded default template `default-2fa-form.html` will be used.
-
 - **`sign_key`**: The base64-encoded secret key used to sign the JWTs. This key will be decoded to bytes for JWT signing.
-  - *Usage Tip*: To create a secure base64-encoded sign key, you can use the command `openssl rand -base64 32`. This command generates a random 32-byte key and encodes it in base64 format.
-  - *Placeholder Support*: You can also use a placeholder to reference a file containing the key, such as `{file./path/to/jwt-secret.txt}`. The file's content will be read and used as the signing key.
+- **`totp_code_length`**: (Optional) The TOTP code length that you have chosen when setting up your TOTP secrets (e.g. 6 or 8). Default is 6. Can be overridden per user in the secrets file (see below).
+
+#### Example JSON structure w/ per-user TOTP Code Length
+
+You can override the global TOTP code length for individual users by specifying a `code_length` property in the secrets JSON file:
+
+```json
+{
+  "users": [
+    {
+      "username": "user1",
+      "secret": "F2MV5KORBGRG5GTEUKHKF3YJYXJPC45PS7YHVV4GFIIWEYQE",
+      "code_length": 8
+    },
+    {
+      "username": "user2",
+      "secret": "BABC3SA2W523ZMLXH73IN46FBWJPEKLLPPL53AO44LWFIS5T"
+      // code_length omitted, will use global/default
+    }
+  ]
+}
+```
+
+Each user should have a unique TOTP secret, formatted in **Base32** without padding (`=`). This key will later be used by a TOTP-compatible app (such as Google Authenticator or Authy) to generate time-based one-time passwords.
+If `code_length` is set for a user, it will override the global `totp_code_length` for that user only.
+**Note:** The code length must match the length that was chosen when the TOTP secret was generated for the user. The plugin does not enforce a specific code length, but validates the code according to the configuration and/or per-user setting.
 
 ### Template Context
 
@@ -116,6 +119,7 @@ The available information in the template context includes:
 - `Username`: The username of the user (HTML escaped).
 - `Errormessage`: Any error message to be displayed.
 - `Nonce`: A nonce used for inline styles.
+- `TOTPCodeLength`: The required code length for the current user (used for input validation in the form).
 
 ### Session Management Explanation
 
@@ -154,7 +158,7 @@ If you want to set up the secret directly in a 2FA app, you can also generate a 
 
     This log entry provides crucial information for security monitoring and can be used with `fail2ban` or similar tools to block repeated failed attempts.
 - **TOTP Validation Settings**: The plugin uses TOTP validation settings compatible with Google Authenticator, including:
-  - 6-digit codes,
+  - 6-digit codes by default, or 8-digit codes if configured globally or per user,
   - A 30-second code validity period,
   - A skew allowance of one period (±30 seconds) for clock drift,
   - SHA-1 as the HMAC algorithm.
