@@ -188,7 +188,7 @@ func (m *BasicAuthTOTP) Validate() error {
 
 	// Validate TOTPCodeLength
 	// Only allow 6 or 8 digits for TOTP codes
-	if m.TOTPCodeLength != int(otp.DigitsSix) && m.TOTPCodeLength != int(otp.DigitsEight) {
+	if !isValidTOTPCodeLength(m.TOTPCodeLength) {
 		return fmt.Errorf("TOTPCodeLength must be 6 or 8")
 	}
 
@@ -244,7 +244,7 @@ func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next c
 	}
 
 	// Only allow 6 or 8 digits for per-user code length
-	if codeLength != int(otp.DigitsSix) && codeLength != int(otp.DigitsEight) {
+	if !isValidTOTPCodeLength(codeLength) {
 		logger.Error("Invalid per-user TOTP code length", zap.Int("code_length", codeLength))
 		formData.ErrorMessage = "Invalid TOTP configuration. Please contact support."
 		m.show2FAForm(w, formData)
@@ -272,13 +272,7 @@ func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next c
 	}
 
 	// Validate the TOTP code with the user's secret and code length.
-	opts := totp.ValidateOpts{
-		Period:    30,
-		Skew:      1,
-		Digits:    otp.Digits(codeLength),
-		Algorithm: otp.AlgorithmSHA1,
-	}
-	valid, err := totp.ValidateCustom(totpCode, secret, time.Now().UTC(), opts)
+	valid, err := validateTOTPCode(totpCode, secret, codeLength)
 	if !valid || err != nil {
 		// If validation fails, log an invalid TOTP attempt for monitoring tools like fail2ban.
 		logger.Warn("Invalid TOTP attempt", zap.Error(err))
@@ -321,6 +315,20 @@ func getClientIP(ctx context.Context, remoteAddr string) string {
 		clientIP = remoteAddr
 	}
 	return clientIP.(string)
+}
+
+func isValidTOTPCodeLength(length int) bool {
+	return length == int(otp.DigitsSix) || length == int(otp.DigitsEight)
+}
+
+func validateTOTPCode(code, secret string, codeLength int) (bool, error) {
+	opts := totp.ValidateOpts{
+		Period:    30,
+		Skew:      1,
+		Digits:    otp.Digits(codeLength),
+		Algorithm: otp.AlgorithmSHA1,
+	}
+	return totp.ValidateCustom(code, secret, time.Now().UTC(), opts)
 }
 
 // Interface guards to ensure BasicAuthTOTP implements the necessary interfaces.
