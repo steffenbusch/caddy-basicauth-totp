@@ -232,7 +232,7 @@ func (m *BasicAuthTOTP) ServeHTTP(w http.ResponseWriter, r *http.Request, next c
 	// log it and show an error message.
 	secret, codeLength, err := m.getSecretForUser(username)
 	if err != nil {
-		logger.Error("Failed to retrieve TOTP secret", zap.Error(err))
+		logger.Error("Failed to retrieve TOTP secret", zap.String("SecretsFilePath", m.SecretsFilePath), zap.Error(err))
 		formData.ErrorMessage = "Invalid TOTP configuration. Please contact support."
 		m.show2FAForm(w, formData)
 		return nil
