@@ -158,7 +158,7 @@ If you want to set up the secret directly in a 2FA app, you can also generate a 
 
     This log entry provides crucial information for security monitoring and can be used with `fail2ban` or similar tools to block repeated failed attempts.
 - **TOTP Validation Settings**: The plugin uses TOTP validation settings compatible with Google Authenticator, including:
-  - 6-digit codes (or your configured code length),
+  - 6-digit codes by default, or 8-digit codes if configured globally or per user,
   - A 30-second code validity period,
   - A skew allowance of one period (±30 seconds) for clock drift,
   - SHA-1 as the HMAC algorithm.
