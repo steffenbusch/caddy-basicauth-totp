@@ -1,6 +1,19 @@
 # BasicAuthTOTP Caddy Plugin
 
 > [!Important]
+> **This plugin has a successor: [caddy-postauth-2fa](https://github.com/steffenbusch/caddy-postauth-2fa)**
+
+The new [caddy-postauth-2fa](https://github.com/steffenbusch/caddy-postauth-2fa) plugin is recommended for all new deployments and offers significant improvements and additional features over BasicAuthTOTP, including:
+
+- **Per-user secrets can be stored as plaintext (`totp_secret`) or encrypted (`totp_secret_encrypted`).**
+- **IP binding is now optional and can be disabled.**
+- **The secrets file format is now a JSON object mapping usernames to secret objects, not an array.**
+
+The **Caddy Post-Auth 2FA** plugin for Caddy adds a second authentication factor (TOTP-based 2FA) after any primary authentication handler (such as `basic_auth` or `jwtauth`).
+
+Please see the [caddy-postauth-2fa documentation](https://github.com/steffenbusch/caddy-postauth-2fa) for details.
+
+> [!Important]
 > With version v0.4.0 (released in February 2025) of this plugin, the server-side session management and the logout functionality were dropped in favor of JWT-based (JSON Web Token-based) session management. The configuration options `logout_session_path` and `logout_redirect_url` must be removed from your Caddy configuration.
 > With version v0.5.0 a **base64-encoded** `sign_key` of at least 32 bytes is now required to securely sign the tokens and ensure their integrity.
 > With version v0.8.0 you can now specify the TOTP code length globally via the `totp_code_length` option or per user in the secrets JSON file (see below).
